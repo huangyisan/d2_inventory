@@ -110,6 +110,23 @@ function planTotals(node, consumed = {}, missing = {}) {
   return { consumed, missing };
 }
 
+/*
+ * The most of `code` this pool can yield. plan() is monotone in qty — asking
+ * for more never turns a failure into a success — so a binary search over the
+ * feasible range is exact under the same greedy rules.
+ */
+function maxMakeable(code, pool, cap = 512) {
+  if (!plan(code, 1, { ...pool }).ok) return 0;
+  let lo = 1, hi = 2;
+  while (hi <= cap && plan(code, hi, { ...pool }).ok) { lo = hi; hi *= 2; }
+  hi = Math.min(hi, cap);
+  while (lo + 1 < hi) {
+    const mid = (lo + hi) >> 1;
+    if (plan(code, mid, { ...pool }).ok) lo = mid; else hi = mid;
+  }
+  return lo;
+}
+
 /* ------------------------------------------------------------------ */
 /* Remember the chosen folder between visits (handle only, never data) */
 /* ------------------------------------------------------------------ */
@@ -931,14 +948,20 @@ function viewCube() {
     <button class="chip" data-clear="1">清空清单</button></div>`;
 
   // One shared pool across all targets, so two Lo really do cost four Ohm.
-  const trees = wanted.map(([code, n]) => ({ code, n, tree: plan(code, n, pool) }));
+  // Snapshot the pool before each target so a failure can say how far it got.
+  const trees = wanted.map(([code, n]) => {
+    const before = { ...pool };
+    const tree = plan(code, n, pool);
+    return { code, n, tree, max: tree.ok ? n : maxMakeable(code, before) };
+  });
   const consumed = {}, missing = {};
   trees.forEach(t => planTotals(t.tree, consumed, missing));
   const ok = trees.every(t => t.tree.ok);
 
-  const detail = trees.map(({ code, n, tree }) => `
+  const detail = trees.map(({ code, n, tree, max }) => `
     <h3 class="psub">${n} × ${runeNo(code)} 号 ${esc(matZh(code))}
-      <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span></h3>
+      <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span>
+      ${tree.ok ? '' : `<span class="cap">这些材料最多凑出 ${max} 个</span>`}</h3>
     ${ownedOf(code) ? `<div class="hint">${copiesHtml(report.materials[code])}</div>` : ''}
     <div class="plan">${planTree(tree)}</div>`).join('');
 
@@ -948,6 +971,9 @@ function viewCube() {
     <div class="verdict ${ok ? 'good' : 'bad'}">
       ${ok ? '✅ 材料够，可以合成' : '❌ 材料不够'}
       <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
+      ${ok ? '' : `<div class="sub">${trees.filter(t => !t.tree.ok)
+        .map(t => `${runeNo(t.code)} 号 ${esc(matZh(t.code).replace(/^符文：/, ''))}：要 ${t.n} 个，这些材料最多凑出 ${t.max} 个`)
+        .join('；')}</div>`}
       ${ok ? '' : '<div class="sub">（树里点符文名可以把它也加进清单，接着往下追）</div>'}
     </div>
     ${detail}

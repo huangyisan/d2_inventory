@@ -176,6 +176,23 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   const short = ctx.planTotals(ctx.plan('r28', 1, { ...lo, r27: 1 })).missing;
   if (!Object.keys(short).length) { console.error('✗ 少一个欧姆时没有报缺'); ok = false; }
   console.log('✓ 合成求解自洽：按缺口补齐即可成，少一件即报缺');
+
+  // "最多能凑出几个" must agree with plan(): N works, N+1 does not.
+  vm.runInContext(`
+    globalThis.__max = function (code) {
+      const pool = {};
+      for (const c of MATERIALS) pool[c] = (report.materials[c] || []).reduce((t, x) => t + (x.n || 1), 0);
+      const max = maxMakeable(code, pool);
+      return { max, atMax: plan(code, max, { ...pool }).ok, over: plan(code, max + 1, { ...pool }).ok };
+    };
+  `, ctx);
+  for (const code of ['r22', 'r25', 'r21', 'r30']) {
+    const m = ctx.__max(code);
+    if (!m.atMax || m.over) { console.error(`✗ ${code} 的上限不自洽: ${JSON.stringify(m)}`); ok = false; }
+  }
+  const g = ctx.__max('r25');
+  if (g.max !== 1) { console.error(`✗ 古尔最多应为 1 个，实际 ${g.max}`); ok = false; }
+  console.log(`✓ 上限自洽：古尔最多 ${g.max} 个、乌姆最多 ${ctx.__max('r22').max} 个（多一个即不成立）`);
 }
 
 /* --- the backup zip must be a real, extractable archive -------------- */

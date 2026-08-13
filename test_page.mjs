@@ -149,6 +149,9 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       out.plusOnBelowMax = /data-plus="1"\\s+title/.test(one);
       // One Um spends two of the six Pul: blue "−2" and a remaining count of 4.
       out.spendShown = one.includes('−2</span><span class="scnt use">4</span>');
+      // ...and the rune being made counts up: 0 Um -> 1, in green.
+      out.gainShown = one.includes('+1</span><span class="scnt gain">1</span>');
+      out.gainInVerdict = one.includes('22 号 0 → 1');
       state.target = null; state.qty = 1;
       return out;
     };
@@ -163,7 +166,8 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   if (!cube.okAtMax) { console.error('✗ 到上限时判定不该是失败'); ok = false; }
   if (!cube.plusOnBelowMax) { console.error('✗ 未到上限时「+」被误禁用'); ok = false; }
   if (!cube.spendShown) { console.error('✗ 消耗后的剩余数量没有显示（普尔 6 −2 → 4）'); ok = false; }
-  console.log('✓ 扣减显示与「+」上限：普尔 6 −2 → 4，到顶禁用且判定仍为可合成');
+  if (!cube.gainShown || !cube.gainInVerdict) { console.error('✗ 目标符文没有显示合成后的 +N'); ok = false; }
+  console.log('✓ 扣减与产出：普尔 6 −2 → 4，乌姆 0 +1 → 1，到顶禁用且判定仍为可合成');
   console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
   console.log(`  当前材料：符文 ${cube.counts.runes} 个 · 宝石 ${cube.counts.gems} 颗`);
   // The auto-sorting stash tabs stack: one entry can be six runes. Counting

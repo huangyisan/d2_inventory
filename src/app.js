@@ -911,19 +911,26 @@ const GEM_QUALITY = ['碎裂', '瑕疵', '普通', '无瑕', '完美'];
  * what it cannot cover, so the left column doubles as a live receipt: spent
  * material counts down in blue, material that runs out turns red.
  */
-function matRow(code, use, short, tight) {
+/*
+ * A row of the stock column, showing what this plan does to it: the target
+ * counts up in green (+N, what you end up with), material spent counts down in
+ * blue, material that runs out is flagged.
+ */
+function matRow(code, use, short, tight, gain) {
   const n = ownedOf(code);
   const on = state.target === code;
-  const rest = n - use;
   const tag = short ? `<span class="sshort">差 ${short}</span>`
             : tight ? `<span class="stight">再合一个还差 ${tight}</span>` : '';
-  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${short ? ' short' : tight ? ' tight' : ''}"
+  let count;
+  if (gain) count = `<span class="sgain">+${gain}</span><span class="scnt gain">${n + gain}</span>`;
+  else if (use) count = `<span class="sused">−${use}</span><span class="scnt use">${n - use}</span>`;
+  else count = `<span class="scnt">${n || '—'}</span>`;
+  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${gain ? ' gain' : ''}${short ? ' short' : tight ? ' tight' : ''}"
     data-add="${code}" title="${esc(matEn(code))} — 点一下算它的合成">
     <span class="sno">${runeNo(code)}</span>
     <span class="sname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
     ${tag}
-    ${use ? `<span class="sused">−${use}</span><span class="scnt use">${rest}</span>`
-          : `<span class="scnt">${n || '—'}</span>`}</button>`;
+    ${count}</button>`;
 }
 
 function gemCell(code, use, short, tight) {
@@ -967,7 +974,8 @@ function viewCube() {
   const socketedTotal = Object.values(report.socketed).reduce((a, b) => a + b, 0);
   const stock = `<div class="stock">
     <div class="stitle">仓库符文 <span class="thin">${s.runeCount} 个 · ${s.runeKinds} 种</span></div>
-    <div class="srows">${RUNES.map(c => matRow(c, consumed[c] || 0, shortOf(c), tightOf(c))).join('')}</div>
+    <div class="srows">${RUNES.map(c =>
+      matRow(c, consumed[c] || 0, shortOf(c), tightOf(c), c === code && tree && tree.ok ? want : 0)).join('')}</div>
     <div class="stitle">仓库宝石 <span class="thin">${s.gemCount} 颗</span></div>
     <table class="gemtab">
       <thead><tr><th></th>${GEM_QUALITY.map(q => `<th>${q}</th>`).join('')}</tr></thead>
@@ -1023,7 +1031,8 @@ function viewCube() {
       <h2 class="section">我要合成 <span class="thin">— 一次只算一种符文</span></h2>
       ${head}
       <div class="verdict ${ok ? 'good' : 'bad'}">
-        ${ok ? `✅ 材料够，可以合 ${want} 个` : '❌ 材料不够'}
+        ${ok ? `✅ 可以合 ${want} 个 · ${runeNo(code)} 号 ${ownedOf(code)} → ${ownedOf(code) + want}`
+             : '❌ 材料不够'}
         <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
         <div class="sub">${ok && atMax ? `这些材料最多就是 ${max} 个，再多要补：${matList(blocking)}`
                                        : ok ? '' : `这些材料最多凑出 ${max} 个`}</div>

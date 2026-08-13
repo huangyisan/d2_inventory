@@ -114,11 +114,11 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       const out = { views: 0, inv: {}, plans: {} };
       for (const code of RUNES) {
         state.tab = 'cube'; state.cube = code;
-        if (!renderView() && !($('#view').innerHTML || '').length) throw new Error('empty ' + code);
+        if (!renderView() && !($("#view").innerHTML || "").length) throw new Error('empty ' + code);
         out.views++;
         const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
         const t = plan(code, 1, pool);
-        out.plans[code] = { short: t.shortTotal, ...planTotals(t) };
+        out.plans[code] = { short: t.ok ? 0 : 1, ...planTotals(t) };
       }
       for (const c of MATERIALS) {
         const n = (report.materials[c] || []).length;

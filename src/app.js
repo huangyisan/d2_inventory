@@ -85,25 +85,27 @@ function plan(code, qty, pool) {
     if (!recipe) node.missing = short;           // El runes and chipped gems: nothing makes them
     else node.children = recipe.map(ing => plan(ing.code, ing.n * short, pool));
   }
-  node.shortTotal = node.missing + node.children.reduce((n, c) => n + c.shortTotal, 0);
-  // How much owned material this branch actually uses. A branch that uses none
-  // is a dead end: there is no point unrolling it down to "446 亿个 El 符文",
-  // the useful answer is "you are short N of this rune".
-  node.used = node.have + node.children.reduce((n, c) => n + c.used, 0);
+  // Can this branch actually be completed? Owning one of every rune still does
+  // not make a Um, and saying "you are short 17 亿个 El 符文" helps nobody —
+  // the useful answer is the shallowest step that fails: "还差 1 个普尔".
+  node.ok = node.have >= node.qty ||
+    (node.children.length > 0 && node.children.every(c => c.ok));
   return node;
 }
 
-// A branch worth expanding is one that spends something you own.
-const barren = node => node.used === 0 && node.qty > node.have;
-
-function planTotals(node, consumed = {}, missing = {}, depth = 0) {
+function planTotals(node, consumed = {}, missing = {}) {
   if (node.have) consumed[node.code] = (consumed[node.code] || 0) + node.have;
-  if (depth > 0 && barren(node)) {
+  if (node.ok) {
+    node.children.forEach(c => planTotals(c, consumed, missing));
+  } else if (!node.children.length) {
     missing[node.code] = (missing[node.code] || 0) + (node.qty - node.have);
-    return { consumed, missing };
+  } else {
+    // Only report the children that break; the ones that work still cost you.
+    for (const c of node.children) {
+      if (c.ok) planTotals(c, consumed, missing);
+      else missing[c.code] = (missing[c.code] || 0) + (c.qty - c.have);
+    }
   }
-  if (node.missing) missing[node.code] = (missing[node.code] || 0) + node.missing;
-  node.children.forEach(c => planTotals(c, consumed, missing, depth + 1));
   return { consumed, missing };
 }
 
@@ -857,22 +859,28 @@ function matCell(code, selectable) {
     <span class="mc">${n || '—'}</span></button>`;
 }
 
-function planTree(node, depth = 0) {
-  const need = node.qty;
-  const dead = depth > 0 && barren(node);
+/*
+ * A working branch is unrolled in full. A broken one is shown one level deep —
+ * just far enough to see which step fails — and you drill in by picking that
+ * rune as the new target.
+ */
+function planTree(node, canExpandBroken = true) {
   const bits = [];
   if (node.have) bits.push(`<span class="ok">现有 ${node.have}</span>`);
-  if (dead) {
-    bits.push(`<span class="no2">缺 ${need - node.have}</span>`);
-  } else {
-    const made = need - node.have - node.missing;
+  if (node.ok) {
+    const made = node.qty - node.have;
     if (made) bits.push(`<span class="mk">合成 ${made}</span>`);
-    if (node.missing) bits.push(`<span class="no2">缺 ${node.missing}</span>`);
+  } else {
+    bits.push(`<span class="no2">缺 ${node.qty - node.have}</span>`);
   }
-  const kids = !dead && node.children.length
-    ? `<div class="kids">${node.children.map(c => planTree(c, depth + 1)).join('')}</div>` : '';
-  return `<div class="pnode">
-    <div class="prow"><b>${need} ×</b> ${esc(matZh(node.code))} ${bits.join(' ')}</div>${kids}</div>`;
+  const expand = node.children.length && (node.ok || canExpandBroken);
+  const kids = expand
+    ? `<div class="kids">${node.children.map(c => planTree(c, false)).join('')}</div>` : '';
+  const name = RUNES.includes(node.code)
+    ? `<button class="lk" data-cube="${node.code}">${esc(matZh(node.code))}</button>`
+    : esc(matZh(node.code));
+  return `<div class="pnode${node.ok ? '' : ' bad'}">
+    <div class="prow"><b>${node.qty} ×</b> ${name} ${bits.join(' ')}</div>${kids}</div>`;
 }
 
 function viewCube() {
@@ -881,7 +889,7 @@ function viewCube() {
   for (const code of MATERIALS) pool[code] = ownedOf(code);
   const tree = plan(target, 1, pool);
   const { consumed, missing } = planTotals(tree);
-  const ok = tree.shortTotal === 0;
+  const ok = tree.ok;
   const s = report.summary;
 
   const consumedList = Object.entries(consumed)
@@ -905,8 +913,8 @@ function viewCube() {
     <div class="verdict ${ok ? 'good' : 'bad'}">
       ${tree.have ? '✅ 已经有了，不用合成' : ok ? '✅ 可以合成！' : '❌ 材料不够'}
       ${ok ? (tree.have ? '' : `<div class="sub">将消耗：${consumedList}</div>`)
-           : `<div class="sub">还需要补：${missingList}</div>
-              <div class="sub">已能凑出的部分会消耗：${consumedList || '无'}</div>`}
+           : `<div class="sub">还差：${missingList}</div>
+              <div class="sub">（下面的树里，点符文名可以把它设成新目标，接着往下看差在哪）</div>`}
     </div>
     ${where}
     <div class="plan">${planTree(tree)}</div>

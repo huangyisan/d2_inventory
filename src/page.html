@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>暗黑2 收藏台账</title>
+<meta name="description" content="读取暗黑破坏神2重制版存档，统计暗金与套装收藏进度、所在小号和重复件。全程本地解析，存档只读。">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%97%A1%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f6f4ef; --panel: #fffdf8; --line: #e2dacb; --ink: #241f18; --muted: #7b7060;
+    --gold: #8f6c12; --gold-bg: #fdf4dd; --green: #2f6b34; --green-bg: #e8f3e6;
+    --dim: #b3a893; --dupe: #a9611b; --dupe-bg: #fdefdf;
+    --lost: #7a4bbd; --lost-bg: #f2ecfb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16130f; --panel: #1e1a15; --line: #332c22; --ink: #eee6d8; --muted: #9b8f7c;
+      --gold: #d9ab3c; --gold-bg: #2a2113; --green: #7fbe72; --green-bg: #17251a;
+      --dim: #5f564a; --dupe: #d99a4a; --dupe-bg: #2b2013;
+      --lost: #b596e8; --lost-bg: #241c33;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16130f; --panel: #1e1a15; --line: #332c22; --ink: #eee6d8; --muted: #9b8f7c;
+    --gold: #d9ab3c; --gold-bg: #2a2113; --green: #7fbe72; --green-bg: #17251a;
+    --dim: #5f564a; --dupe: #d99a4a; --dupe-bg: #2b2013;
+      --lost: #b596e8; --lost-bg: #241c33;
+  }
+  * { box-sizing: border-box; }
+  html, body { max-width: 100%; overflow-x: hidden; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+  body.drag { outline: 3px dashed var(--gold); outline-offset: -12px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 26px 20px 80px; }
+
+  header h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: .3px; }
+  .status { color: var(--muted); font-size: 13px; min-height: 20px; }
+
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 16px 0 4px; }
+  button.btn {
+    font: inherit; font-size: 14px; cursor: pointer; padding: 8px 16px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  }
+  button.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.btn:disabled { opacity: .45; cursor: default; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+
+  .intro { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+           padding: 22px 24px; margin-top: 20px; }
+  .intro h2 { margin: 0 0 10px; font-size: 17px; }
+  .intro ol { margin: 0 0 14px; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  .intro code { background: var(--bg); border: 1px solid var(--line); border-radius: 5px;
+                padding: 1px 6px; font-size: 12.5px; word-break: break-all; }
+  .safe { color: var(--green); font-size: 13px; margin-top: 6px; }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 22px 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card .n { font-size: 26px; font-weight: 600; line-height: 1.2; }
+  .card .of { font-size: 15px; color: var(--muted); font-weight: 400; }
+  .card .l { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .card .sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .bar { height: 5px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 9px; }
+  .bar i { display: block; height: 100%; background: var(--gold); }
+  .bar.g i { background: var(--green); }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+             position: sticky; top: 0; background: var(--bg); padding: 10px 0; z-index: 5;
+             border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  button.tab, button.chip {
+    font: inherit; font-size: 13.5px; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); padding: 6px 13px; border-radius: 999px;
+  }
+  button.tab[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.chip[aria-pressed="true"] { background: var(--gold-bg); border-color: var(--gold); color: var(--gold); }
+  input[type=search] {
+    font: inherit; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); min-width: 220px; flex: 1;
+  }
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin: 14px 0 16px; }
+  .filters .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+
+  h2.section { font-size: 15px; color: var(--ink); font-weight: 600; margin: 26px 0 10px; }
+  h2.section .thin { font-weight: 400; color: var(--muted); font-size: 13.5px; }
+
+  .setgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .setcard { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .setcard.done { border-color: var(--green); background: var(--green-bg); }
+  .setcard h3 { margin: 0; font-size: 16px; display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .setcard h3 .cnt { font-size: 13px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .setcard h3 .cnt.ok { color: var(--green); }
+  .setcard .en { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+  ul.pieces { list-style: none; margin: 8px 0 0; padding: 0; }
+  ul.pieces li { display: flex; gap: 8px; align-items: baseline; padding: 5px 0;
+                 border-top: 1px dashed var(--line); font-size: 13.5px; }
+  ul.pieces li:first-child { border-top: 0; }
+  .slot { color: var(--muted); font-size: 11.5px; min-width: 44px; flex: none; }
+  .pname { flex: 1; }
+  li.miss .pname { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--dim); }
+  li.have .pname { color: var(--green); font-weight: 500; }
+  .loc { color: var(--muted); font-size: 12px; text-align: right; flex: none; max-width: 46%; }
+
+  li.lost .pname { color: var(--lost); }
+  .lostbadge { color: var(--lost); background: var(--lost-bg); border: 1px solid var(--lost);
+               border-radius: 5px; padding: 0 5px; font-size: 11px; white-space: nowrap; }
+  .hintbox { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+             padding: 9px 14px; font-size: 12.5px; color: var(--muted); margin-bottom: 14px; }
+  /* Character names can read like ordinary words, so mark them visually. */
+  .who { color: var(--ink); font-weight: 600; background: var(--line);
+         border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+  .dupe { color: var(--dupe); background: var(--dupe-bg); border: 1px solid var(--dupe);
+          border-radius: 5px; padding: 0 5px; font-size: 11px; white-space: nowrap; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr.miss td { color: var(--dim); }
+  td.name b { font-weight: 600; }
+  td.name.u b { color: var(--gold); }
+  td.name.s b { color: var(--green); }
+  td.name .en { display: block; color: var(--muted); font-size: 11.5px; }
+  .tag { font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+  .scroll { overflow-x: auto; }
+  .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+  .warn { background: var(--gold-bg); border: 1px solid var(--gold); color: var(--gold);
+          border-radius: 8px; padding: 9px 14px; font-size: 13px; margin: 10px 0; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>暗黑破坏神2 · 收藏台账</h1>
+    <div class="status" id="status">选择你的存档文件夹开始。</div>
+    <div class="actions">
+      <button class="btn primary" id="pick">选择存档文件夹</button>
+      <button class="btn" id="reload" disabled>重新读取</button>
+      <input type="file" id="fallback" webkitdirectory directory multiple hidden>
+      <span class="hint">玩完游戏存档后，点「重新读取」即可刷新（⌘R / Ctrl+R）</span>
+    </div>
+  </header>
+
+  <div class="intro" id="intro">
+    <h2>怎么用</h2>
+    <ol>
+      <li>点「选择存档文件夹」，选中 D2R 的存档目录，浏览器会问一次读取权限。</li>
+      <li>页面会扫描目录下所有 <code>.d2s</code> 小号和 <code>.d2i</code> 共享仓库，列出你的暗金与绿装收藏。</li>
+      <li>之后每次玩完游戏，回到这个页面点「重新读取」就会刷新。文件夹会被记住，下次打开自动载入。</li>
+    </ol>
+    <div class="hint">macOS 存档目录通常在：<br>
+      <code>~/Library/Application Support/Blizzard/Diablo II Resurrected/</code><br>
+      Windows 通常在：<code>%USERPROFILE%\Saved Games\Diablo II Resurrected\</code></div>
+    <div class="safe">🔒 全程只在你的浏览器本地读取，存档以只读方式打开，不会修改、不会上传到任何地方。</div>
+    <div class="warn" id="nofsa" hidden>
+      当前浏览器不支持直接打开文件夹（Safari 等）。点「选择存档文件夹」会改用文件选择框，
+      功能一样，只是每次刷新需要重新选一次。用 Chrome / Edge 体验最好。
+    </div>
+  </div>
+
+  <div id="main" hidden>
+    <div class="cards" id="cards"></div>
+    <div id="warnings"></div>
+    <div class="toolbar">
+      <div class="tabs" id="tabs"></div>
+      <input type="search" id="q" placeholder="搜索物品 / 套装 / 小号名…（中英文皆可）">
+    </div>
+    <div class="filters" id="filters"></div>
+    <div id="view"></div>
+  </div>
+
+  <footer>
+    物品名称与目录取自游戏数据表；新版本内容若暂无官方中文则显示英文原名。
+    存档解析全部在本地浏览器中完成，只读不写。
+  </footer>
+</div>
+
+<script>
+const CATALOG = __CATALOG__;
+</script>
+<script>
+__PARSER__
+</script>
+<script>
+__APP__
+</script>
+</body>
+</html>

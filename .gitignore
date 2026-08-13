@@ -1,0 +1,21 @@
+# 个人存档与解析结果 —— 绝不提交
+Diablo_2_Resurrected/
+*.d2s
+*.d2i
+*.d2x
+py_dump.json
+js_dump.json
+
+# 可用 fetch_data.py / fetch_names.py / fetch_t2s.py 重新下载的原始数据表。
+# 页面真正需要的 data/catalog.json 是提交的。
+data/*
+!data/catalog.json
+
+# 本地便捷副本，内容与 dist/index.html 完全相同（避免每次重建双份写入历史）
+暗黑2收藏台账.html
+
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store
+.wrangler/

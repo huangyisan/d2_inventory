@@ -501,7 +501,7 @@ document.addEventListener('drop', async e => {
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
 const ALL_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
-  ['owned', '我的收藏'], ['dupes', '重复清理'], ['cube', '符文合成'], ['chars', '按小号']];
+  ['dupes', '重复清理'], ['cube', '符文合成'], ['chars', '按小号']];
 // The chronicle tab only exists in D2R saves that have one.
 const TABS = () => ALL_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle);
 
@@ -694,7 +694,7 @@ function renderTabs() {
 }
 
 function renderFilters() {
-  const showSlot = state.tab === 'uniques' || state.tab === 'owned' || state.tab === 'lost';
+  const showSlot = state.tab === 'uniques' || state.tab === 'lost';
   const showOnly = state.tab === 'uniques' || state.tab === 'sets';
   let html = '';
   if (showOnly) {
@@ -810,21 +810,6 @@ function ownedEntries() {
   report.uniques.forEach(u => { if (u.owned) out.push({ ...u, kind: 'u', group: '暗金' }); });
   report.sets.forEach(g => g.pieces.forEach(p => { if (p.owned) out.push({ ...p, kind: 's', group: g.zh }); }));
   return out;
-}
-
-function viewOwned() {
-  const rows = ownedEntries().filter(e => (!state.slot || e.slot === state.slot) && hit(e, state.q));
-  rows.sort((a, b) => (SLOTS.indexOf(a.slot) - SLOTS.indexOf(b.slot)) || a.zh.localeCompare(b.zh, 'zh'));
-  if (!rows.length) return `<div class="empty">没有匹配的物品</div>`;
-  return `<h2 class="section">已拥有 ${rows.length} 种</h2>
-  <div class="scroll"><table>
-    <thead><tr><th>部位</th><th>名称</th><th>所属</th><th>数量</th><th>在哪个小号</th></tr></thead>
-    <tbody>${rows.map(e => `
-      <tr><td>${esc(e.slot)}</td>
-        <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
-        <td>${esc(e.group)}</td>
-        <td>${e.count}${e.count > 1 ? ' <span class="dupe">重复</span>' : ''}</td>
-        <td>${copiesHtml(e.copies)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
 function viewDupes() {
@@ -1049,7 +1034,7 @@ function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
   const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost,
-    owned: viewOwned, dupes: viewDupes, cube: viewCube, chars: viewChars };
+    dupes: viewDupes, cube: viewCube, chars: viewChars };
   $('#view').innerHTML = fn[state.tab]();
 }
 

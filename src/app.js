@@ -309,6 +309,78 @@ function copiesHtml(copies) {
 
 const dupeBadge = n => n > 1 ? ` <span class="dupe">×${n}</span>` : '';
 
+/*
+ * Hover tooltips. The properties come from the game data tables, so ranges are
+ * shown as ranges (+20~35%) rather than any particular copy's rolled value.
+ * Entries are registered by id and looked up on hover, which keeps the markup
+ * small and avoids re-rendering tooltips into every row.
+ */
+const TIPS = new Map();
+let tipSeq = 0;
+
+function tipFor(entry, extraTitle) {
+  if (!entry.props || !entry.props.length) return '';
+  const id = 't' + (++tipSeq);
+  TIPS.set(id, { entry, extraTitle });
+  return ` data-tip="${id}"`;
+}
+
+function renderTip(id) {
+  const rec = TIPS.get(id);
+  if (!rec) return '';
+  const e = rec.entry;
+  const line = s => `<div class="tprop">${esc(s)}</div>`;
+  return `
+    <div class="thead">
+      <div class="tname ${e.kind === 's' || e.id !== undefined ? 's' : 'u'}">${esc(e.zh)}</div>
+      <div class="tbase">${esc(e.base_zh || e.base || '')}${e.lvlreq ? ` · 需求等级 ${e.lvlreq}` : ''}</div>
+    </div>
+    <div class="tbody">${e.props.map(line).join('')}</div>
+    ${e.bonus && e.bonus.length ? `<div class="tbonus"><div class="tlabel">套装加成</div>${e.bonus.map(line).join('')}</div>` : ''}
+    <div class="tfoot">数值取自游戏数据表，区间表示该属性会浮动</div>`;
+}
+
+let tipEl = null;
+
+function showTip(target) {
+  const id = target.dataset.tip;
+  if (!id) return;
+  if (!tipEl) {
+    tipEl = document.createElement('div');
+    tipEl.className = 'tooltip';
+    document.body.appendChild(tipEl);
+  }
+  tipEl.innerHTML = renderTip(id);
+  tipEl.hidden = false;
+
+  const r = target.getBoundingClientRect();
+  const tr = tipEl.getBoundingClientRect();
+  let left = r.left;
+  let top = r.bottom + 8;
+  if (left + tr.width > window.innerWidth - 12) left = window.innerWidth - tr.width - 12;
+  if (top + tr.height > window.innerHeight - 12) top = r.top - tr.height - 8;
+  tipEl.style.left = Math.max(12, left) + 'px';
+  tipEl.style.top = Math.max(12, top) + 'px';
+}
+
+function hideTip() {
+  if (tipEl) tipEl.hidden = true;
+}
+
+document.addEventListener('mouseover', e => {
+  const t = e.target.closest('[data-tip]');
+  if (t) showTip(t); else if (!e.target.closest('.tooltip')) hideTip();
+});
+document.addEventListener('mouseout', e => {
+  if (e.target.closest('[data-tip]')) hideTip();
+});
+document.addEventListener('click', e => {
+  // Tap support on touch screens.
+  const t = e.target.closest('[data-tip]');
+  if (t) showTip(t); else hideTip();
+});
+window.addEventListener('scroll', hideTip, true);
+
 function renderTop() {
   const s = report.summary;
   const pctU = Math.round(s.uniqueOwned / s.uniqueTotal * 100);
@@ -402,7 +474,7 @@ function viewSets() {
       <ul class="pieces">${g.pieces.map(p => `
         <li class="${p.owned ? 'have' : (p.lost ? 'lost' : 'miss')}">
           <span class="slot">${esc(p.slot)}</span>
-          <span class="pname">${esc(p.zh)}${dupeBadge(p.count)}</span>
+          <span class="pname"${tipFor(p)}>${esc(p.zh)}${dupeBadge(p.count)}</span>
           <span class="loc">${p.owned ? copiesHtml(p.copies)
             : (p.lost ? '<span class="lostbadge">曾找到过</span>' : '未拥有')}</span>
         </li>`).join('')}</ul>
@@ -424,7 +496,7 @@ function viewUniques() {
     <tbody>${rows.map(u => `
       <tr class="${u.owned ? '' : 'miss'}">
         <td>${esc(u.slot)}</td>
-        <td class="name u"><b>${esc(u.zh)}</b>${dupeBadge(u.count)}${u.standard ? '' : ' <span class="tag">特殊</span>'}<span class="en">${esc(u.name)}</span></td>
+        <td class="name u"${tipFor(u)}><b>${esc(u.zh)}</b>${dupeBadge(u.count)}${u.standard ? '' : ' <span class="tag">特殊</span>'}<span class="en">${esc(u.name)}</span></td>
         <td>${esc(u.base_zh)}</td>
         <td>${u.lvlreq || '-'}</td>
         <td>${u.owned ? copiesHtml(u.copies)
@@ -457,7 +529,7 @@ function viewLost() {
     <thead><tr><th>部位</th><th>名称</th><th>所属</th><th>基础装备</th><th>等级</th></tr></thead>
     <tbody>${filtered.map(e => `
       <tr><td>${esc(e.slot)}</td>
-        <td class="name ${e.kind}"><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
+        <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
         <td>${esc(e.group)}</td>
         <td>${esc(e.base_zh)}</td>
         <td>${e.lvlreq || '-'}</td></tr>`).join('')}</tbody></table></div>`;
@@ -479,7 +551,7 @@ function viewOwned() {
     <thead><tr><th>部位</th><th>名称</th><th>所属</th><th>数量</th><th>在哪个小号</th></tr></thead>
     <tbody>${rows.map(e => `
       <tr><td>${esc(e.slot)}</td>
-        <td class="name ${e.kind}"><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
+        <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
         <td>${esc(e.group)}</td>
         <td>${e.count}${e.count > 1 ? ' <span class="dupe">重复</span>' : ''}</td>
         <td>${copiesHtml(e.copies)}</td></tr>`).join('')}</tbody></table></div>`;
@@ -495,7 +567,7 @@ function viewDupes() {
     <thead><tr><th>部位</th><th>名称</th><th>拥有</th><th>多余</th><th>分别在哪</th></tr></thead>
     <tbody>${rows.map(e => `
       <tr><td>${esc(e.slot)}</td>
-        <td class="name ${e.kind}"><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
+        <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
         <td>${e.count}</td><td><span class="dupe">+${e.count - 1}</span></td>
         <td>${copiesHtml(e.copies)}</td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -520,13 +592,15 @@ function viewChars() {
       ${list.length ? `<div class="scroll"><table>
         <thead><tr><th>部位</th><th>名称</th><th>所属</th><th>位置</th></tr></thead>
         <tbody>${list.map(e => `<tr><td>${esc(e.slot)}</td>
-          <td class="name ${e.kind}"><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
+          <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
           <td>${esc(e.group)}</td><td>${esc(e.where)}</td></tr>`).join('')}</tbody>
       </table></div>` : `<div class="empty">没有暗金或绿装</div>`}`;
   }).join('');
 }
 
 function renderView() {
+  TIPS.clear(); tipSeq = 0;
+  hideTip();
   const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost,
     owned: viewOwned, dupes: viewDupes, chars: viewChars };
   $('#view').innerHTML = fn[state.tab]();

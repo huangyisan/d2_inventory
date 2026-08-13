@@ -29,15 +29,17 @@ const document = {
     return selectors.get(s);
   },
   addEventListener: (t, f) => listeners.push([t, f]),
+  createElement: () => el(),
   documentElement: {},
+  body: { appendChild() {} },
 };
 const ctx = vm.createContext({
   document,
-  window: {},                 // no showDirectoryPicker -> triggers fallback branch
+  window: { addEventListener() {}, innerWidth: 1200, innerHeight: 900 },  // no showDirectoryPicker -> fallback branch
   indexedDB: { open: () => ({ }) },
   navigator: { userAgent: 'node' },
   console,
-  Date, Math, JSON, Map, Set, Proxy, Intl,
+  Date, Math, JSON, Map, Set, Proxy, Intl, Object, Array,
   setTimeout, clearTimeout,
 });
 

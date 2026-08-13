@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from d2parse import GameData, slot_of  # noqa: E402
+from props import PropRenderer  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(HERE, "data")
@@ -111,6 +112,23 @@ def main():
     # zhTW wording (what the player's client shows), simplified glyphs.
     t2s = Traditional2Simplified(os.path.join(DATA_DIR, "t2s.json"))
     strings = Strings(os.path.join(DATA_DIR, "strings_raw.json"), lang="zhTW", transform=t2s)
+    skill_strings = Strings(os.path.join(DATA_DIR, "strings_mod.json"), lang="zhTW", transform=t2s)
+
+    class MergedStrings:
+        """Item strings first, then the skill/UI bundle."""
+
+        def get(self, key, fallback=None):
+            got = strings.get(key, None)
+            if got and got != key:
+                return got
+            return skill_strings.get(key, fallback)
+
+    props = PropRenderer(DATA_DIR, MergedStrings(), t2s)
+
+    # Raw table rows, indexed by the same id the save file stores, so the
+    # property columns (prop1..propN) can be rendered.
+    raw_unique = {r["*ID"]: r for r in gd.uniques.values() if r.get("*ID") is not None}
+    raw_set = {r["*ID"]: r for r in gd.setitems.values() if r.get("*ID") is not None}
 
     # ---- base items ------------------------------------------------------
     bases = {}
@@ -162,6 +180,7 @@ def main():
             "lvlreq": 0,
             "standard": False,
             "ids": [],
+            "props": props.render_rows(raw_unique.get(uid, {}), 12),
         })
         entry["ids"].append(uid)
         entry["lvlreq"] = max(entry["lvlreq"], info["lvlreq"] or 0)
@@ -186,6 +205,10 @@ def main():
             "base_zh": strings.get(info["code"], info["base"]),
             "lvlreq": info["lvlreq"] or 0,
             "id": sid,
+            "props": props.render_rows(raw_set.get(sid, {}), 9),
+            # Green "set bonus" lines that activate with other pieces equipped.
+            "bonus": props.render_rows(raw_set.get(sid, {}), 5,
+                                       prefix="aprop", par="apar", lo="amin", hi="amax"),
         })
 
     # ---- runewords, keyed by the string id stored on items ---------------
@@ -215,6 +238,8 @@ def main():
 
     size = os.path.getsize(out)
     print(f"runewords={len(runewords)}")
+    if props.unmapped:
+        print(f"未映射属性码 ({len(props.unmapped)}): {sorted(props.unmapped)}")
     print(f"bases={len(bases)} stats={len(stats)} "
           f"uniques={len(catalog['uniques'])} sets={len(catalog['sets'])} "
           f"pieces={sum(len(g['pieces']) for g in catalog['sets'])}")

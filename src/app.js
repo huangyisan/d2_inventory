@@ -911,25 +911,28 @@ const GEM_QUALITY = ['碎裂', '瑕疵', '普通', '无瑕', '完美'];
  * what it cannot cover, so the left column doubles as a live receipt: spent
  * material counts down in blue, material that runs out turns red.
  */
-function matRow(code, use, short) {
+function matRow(code, use, short, tight) {
   const n = ownedOf(code);
   const on = state.target === code;
   const rest = n - use;
-  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${short ? ' short' : ''}"
+  const tag = short ? `<span class="sshort">差 ${short}</span>`
+            : tight ? `<span class="stight">再合一个还差 ${tight}</span>` : '';
+  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${short ? ' short' : tight ? ' tight' : ''}"
     data-add="${code}" title="${esc(matEn(code))} — 点一下算它的合成">
     <span class="sno">${runeNo(code)}</span>
     <span class="sname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
-    ${short ? `<span class="sshort">差 ${short}</span>` : ''}
+    ${tag}
     ${use ? `<span class="sused">−${use}</span><span class="scnt use">${rest}</span>`
           : `<span class="scnt">${n || '—'}</span>`}</button>`;
 }
 
-function gemCell(code, use, short) {
+function gemCell(code, use, short, tight) {
   const n = ownedOf(code);
   const rest = n - use;
-  const cls = short ? 'short' : use ? 'use' : n ? '' : 'zero';
+  const cls = short ? 'short' : tight ? 'tight' : use ? 'use' : n ? '' : 'zero';
   const label = short ? `${rest}<i>差${short}</i>` : use ? `${rest}<i>−${use}</i>` : (n || '—');
-  return `<td class="${cls}" title="${esc(matZh(code))}${use ? ` — 原有 ${n}，消耗 ${use}` : ''}">${label}</td>`;
+  const why = short ? ` — 还差 ${short}` : tight ? ` — 再合一个还差 ${tight}` : use ? ` — 原有 ${n}，消耗 ${use}` : '';
+  return `<td class="${cls}" title="${esc(matZh(code))}${why}">${label}</td>`;
 }
 
 function viewCube() {
@@ -951,18 +954,22 @@ function viewCube() {
     // At the ceiling, show what one more would run out of — that is why "+" is off.
     if (want >= max) blocking = planTotals(plan(code, want + 1, { ...owned }, false)).missing;
   }
-  const shortOf = c => missing[c] || blocking[c] || 0;
+  // Two different states, and conflating them reads as "cannot make any":
+  //   short  — this plan cannot be completed, the material is genuinely missing
+  //   tight  — this plan works, there just is not enough left for one *more*
+  const shortOf = c => missing[c] || 0;
+  const tightOf = c => (missing[c] ? 0 : blocking[c] || 0);
 
   /* ---- left column: stock, doubling as the receipt ---- */
   const socketedTotal = Object.values(report.socketed).reduce((a, b) => a + b, 0);
   const stock = `<div class="stock">
     <div class="stitle">仓库符文 <span class="thin">${s.runeCount} 个 · ${s.runeKinds} 种</span></div>
-    <div class="srows">${RUNES.map(c => matRow(c, consumed[c] || 0, shortOf(c))).join('')}</div>
+    <div class="srows">${RUNES.map(c => matRow(c, consumed[c] || 0, shortOf(c), tightOf(c))).join('')}</div>
     <div class="stitle">仓库宝石 <span class="thin">${s.gemCount} 颗</span></div>
     <table class="gemtab">
       <thead><tr><th></th>${GEM_QUALITY.map(q => `<th>${q}</th>`).join('')}</tr></thead>
       <tbody>${Object.entries(GEMS).map(([label, codes]) => `<tr><th>${label}</th>${
-        codes.map(c => gemCell(c, consumed[c] || 0, shortOf(c))).join('')}</tr>`).join('')}</tbody>
+        codes.map(c => gemCell(c, consumed[c] || 0, shortOf(c), tightOf(c))).join('')}</tr>`).join('')}</tbody>
     </table>
     ${socketedTotal ? `<div class="hint">另有 ${socketedTotal} 个已镶在装备里，拿不出来，不计入材料。</div>` : ''}
   </div>`;
@@ -1015,7 +1022,8 @@ function viewCube() {
       <div class="verdict ${ok ? 'good' : 'bad'}">
         ${ok ? `✅ 材料够，可以合 ${want} 个` : '❌ 材料不够'}
         <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
-        ${ok ? '' : `<div class="sub">这些材料最多凑出 ${max} 个</div>`}
+        <div class="sub">${ok && atMax ? `这些材料最多就是 ${max} 个，再多要补：${matList(blocking)}`
+                                       : ok ? '' : `这些材料最多凑出 ${max} 个`}</div>
       </div>
       ${ownedOf(code) ? `<div class="hint">现货在：${copiesHtml(report.materials[code])}</div>` : ''}
       <div class="plan">${planTree(tree)}</div>

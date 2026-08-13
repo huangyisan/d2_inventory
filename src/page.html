@@ -188,6 +188,8 @@
   .srow .scnt.use { color: var(--use); }
   .srow .sused { color: var(--use); font-size: 11px; }
   .srow .sshort { color: var(--bad); font-size: 11px; font-weight: 600; }
+  .srow .stight { color: var(--dupe); font-size: 10.5px; }
+  .srow.tight { border-color: var(--dupe); }
   .srow.short { border-color: var(--bad); background: var(--bad-bg); animation: flash .5s ease-out 2; }
   @keyframes flash { 0%, 100% { background: var(--bad-bg); } 50% { background: transparent; } }
   @media (prefers-reduced-motion: reduce) { .srow.short { animation: none; } }
@@ -198,6 +200,7 @@
   .gemtab td.zero { color: var(--dim); }
   .gemtab td.use { color: var(--use); font-weight: 600; }
   .gemtab td.short { color: var(--bad); font-weight: 600; background: var(--bad-bg); }
+  .gemtab td.tight { color: var(--dupe); font-weight: 600; }
   .gemtab td i { font-style: normal; font-size: 10px; opacity: .8; margin-left: 2px; }
   .verdict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px;
              font-size: 16px; font-weight: 600; margin: 4px 0 12px; }

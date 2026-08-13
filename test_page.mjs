@@ -137,8 +137,11 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       out.clamped = ($('#view').innerHTML || '').includes('可以合 3 个');
       // At the ceiling "+" must be off and the material that runs out marked red.
       out.plusOffAtMax = /data-plus="1"\\s+disabled/.test($('#view').innerHTML || '');
-      out.redAtMax = ($('#view').innerHTML || '').includes('srow zero short') ||
-                     ($('#view').innerHTML || '').includes('short">差');
+      // At the ceiling the plan still succeeds, so the limiting material is
+      // marked "再合一个还差 N" — not red, which would read as "cannot make any".
+      out.tightAtMax = ($('#view').innerHTML || '').includes('再合一个还差');
+      out.noRedAtMax = !($('#view').innerHTML || '').includes('sshort');
+      out.okAtMax = ($('#view').innerHTML || '').includes('✅');
       state.target = 'r22'; state.qty = 1; renderView();
       const one = $('#view').innerHTML || '';
       out.plusOnBelowMax = /data-plus="1"\\s+title/.test(one);
@@ -152,10 +155,12 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   if (!cube.basketLen) { console.error('✗ 目标视图渲染为空'); ok = false; }
   if (!cube.clamped) { console.error('✗ 数量没有被材料上限夹住（乌姆应为 3 个）'); ok = false; }
   if (!cube.plusOffAtMax) { console.error('✗ 到上限时「+」没有禁用'); ok = false; }
-  if (!cube.redAtMax) { console.error('✗ 到上限时缺的材料没有标红'); ok = false; }
+  if (!cube.tightAtMax) { console.error('✗ 到上限时没有标出「再合一个还差」'); ok = false; }
+  if (!cube.noRedAtMax) { console.error('✗ 到上限时误把材料标成红色缺料'); ok = false; }
+  if (!cube.okAtMax) { console.error('✗ 到上限时判定不该是失败'); ok = false; }
   if (!cube.plusOnBelowMax) { console.error('✗ 未到上限时「+」被误禁用'); ok = false; }
   if (!cube.spendShown) { console.error('✗ 消耗后的剩余数量没有显示（普尔 6 −2 → 4）'); ok = false; }
-  console.log('✓ 扣减显示与「+」上限：普尔 6 −2 → 4，到顶禁用并标红');
+  console.log('✓ 扣减显示与「+」上限：普尔 6 −2 → 4，到顶禁用且判定仍为可合成');
   console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
   console.log(`  当前材料：符文 ${cube.counts.runes} 个 · 宝石 ${cube.counts.gems} 颗`);
   // The auto-sorting stash tabs stack: one entry can be six runes. Counting

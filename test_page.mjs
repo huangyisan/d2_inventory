@@ -112,12 +112,12 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
     globalThis.__cube = function (rep) {
       report = rep;
       const out = { views: 0, inv: {}, plans: {} };
-      // Empty list first: it must render its own prompt, not blow up.
-      state.tab = 'cube'; state.want = {};
+      // No target picked yet: it must render its own prompt, not blow up.
+      state.tab = 'cube'; state.target = null;
       renderView();
       if (!($('#view').innerHTML || '').length) throw new Error('empty basket view');
       for (const code of RUNES) {
-        state.tab = 'cube'; state.want = { [code]: 1 };
+        state.tab = 'cube'; state.target = code; state.qty = 1;
         if (!renderView() && !($("#view").innerHTML || "").length) throw new Error('empty ' + code);
         out.views++;
         const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
@@ -130,16 +130,32 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       }
       out.counts = { runes: report.summary.runeCount, gems: report.summary.gemCount,
                      pul: (report.materials.r21 || []).reduce((t, x) => t + (x.n || 1), 0) };
-      // A basket of several targets shares one material pool.
-      state.want = { r22: 1, r25: 1 };
+      // Asking for more than the material allows must clamp, not explode.
+      state.target = 'r22'; state.qty = 99;
       renderView();
       out.basketLen = ($('#view').innerHTML || '').length;
-      state.want = {};
+      out.clamped = ($('#view').innerHTML || '').includes('可以合 3 个');
+      // At the ceiling "+" must be off and the material that runs out marked red.
+      out.plusOffAtMax = /data-plus="1"\\s+disabled/.test($('#view').innerHTML || '');
+      out.redAtMax = ($('#view').innerHTML || '').includes('srow zero short') ||
+                     ($('#view').innerHTML || '').includes('short">差');
+      state.target = 'r22'; state.qty = 1; renderView();
+      const one = $('#view').innerHTML || '';
+      out.plusOnBelowMax = /data-plus="1"\\s+title/.test(one);
+      // One Um spends two of the six Pul: blue "−2" and a remaining count of 4.
+      out.spendShown = one.includes('−2</span><span class="scnt use">4</span>');
+      state.target = null; state.qty = 1;
       return out;
     };
   `, ctx);
   const cube = ctx.__cube(report);
-  if (!cube.basketLen) { console.error('✗ 多目标清单渲染为空'); ok = false; }
+  if (!cube.basketLen) { console.error('✗ 目标视图渲染为空'); ok = false; }
+  if (!cube.clamped) { console.error('✗ 数量没有被材料上限夹住（乌姆应为 3 个）'); ok = false; }
+  if (!cube.plusOffAtMax) { console.error('✗ 到上限时「+」没有禁用'); ok = false; }
+  if (!cube.redAtMax) { console.error('✗ 到上限时缺的材料没有标红'); ok = false; }
+  if (!cube.plusOnBelowMax) { console.error('✗ 未到上限时「+」被误禁用'); ok = false; }
+  if (!cube.spendShown) { console.error('✗ 消耗后的剩余数量没有显示（普尔 6 −2 → 4）'); ok = false; }
+  console.log('✓ 扣减显示与「+」上限：普尔 6 −2 → 4，到顶禁用并标红');
   console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
   console.log(`  当前材料：符文 ${cube.counts.runes} 个 · 宝石 ${cube.counts.gems} 颗`);
   // The auto-sorting stash tabs stack: one entry can be six runes. Counting

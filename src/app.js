@@ -14,8 +14,8 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
-let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', want: {} };
-// want: the shopping list — rune code -> how many of it you want to end up with.
+let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', target: null, qty: 1 };
+// target/qty: the one rune the cube page is solving for, and how many of it.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -906,92 +906,101 @@ const matList = obj => Object.entries(obj)
 
 const GEM_QUALITY = ['碎裂', '瑕疵', '普通', '无瑕', '完美'];
 
-// One row of the stock column: number, name, how many you have.
-function matRow(code, clickable) {
+/*
+ * One row of the stock column. `use` is what this plan spends of it and `short`
+ * what it cannot cover, so the left column doubles as a live receipt: spent
+ * material counts down in blue, material that runs out turns red.
+ */
+function matRow(code, use, short) {
   const n = ownedOf(code);
-  const want = state.want[code] || 0;
-  return `<button class="srow${n ? '' : ' zero'}${want ? ' on' : ''}"${clickable ? ` data-add="${code}"` : ''}
-    title="${esc(matEn(code))}${clickable ? ' — 点一下加入合成清单' : ''}">
+  const on = state.target === code;
+  const rest = n - use;
+  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${short ? ' short' : ''}"
+    data-add="${code}" title="${esc(matEn(code))} — 点一下算它的合成">
     <span class="sno">${runeNo(code)}</span>
     <span class="sname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
-    ${want ? `<span class="swant">要${want}</span>` : ''}
-    <span class="scnt">${n || '—'}</span></button>`;
+    ${short ? `<span class="sshort">差 ${short}</span>` : ''}
+    ${use ? `<span class="sused">−${use}</span><span class="scnt use">${rest}</span>`
+          : `<span class="scnt">${n || '—'}</span>`}</button>`;
+}
+
+function gemCell(code, use, short) {
+  const n = ownedOf(code);
+  const rest = n - use;
+  const cls = short ? 'short' : use ? 'use' : n ? '' : 'zero';
+  const label = short ? `${rest}<i>差${short}</i>` : use ? `${rest}<i>−${use}</i>` : (n || '—');
+  return `<td class="${cls}" title="${esc(matZh(code))}${use ? ` — 原有 ${n}，消耗 ${use}` : ''}">${label}</td>`;
 }
 
 function viewCube() {
   const s = report.summary;
-  // Everything you own is the starting material; the list is what you want out.
-  const pool = {};
-  for (const code of MATERIALS) pool[code] = ownedOf(code);
+  const code = state.target;
+  const qty = Math.max(1, state.qty);
 
-  // Expensive targets first, so they get first claim on the shared material.
-  const wanted = Object.entries(state.want).filter(([, n]) => n > 0)
-    .sort((a, b) => RUNES.indexOf(b[0]) - RUNES.indexOf(a[0]));
+  // Everything you own is the starting material.
+  const owned = {};
+  for (const c of MATERIALS) owned[c] = ownedOf(c);
 
-  /* ---- left column: what you own ---- */
+  let tree = null, consumed = {}, missing = {}, max = 0, blocking = {}, want = qty;
+  if (code) {
+    max = maxMakeable(code, owned);
+    // Never ask for more than the material allows; "+" stops there too.
+    want = max > 0 ? Math.min(qty, max) : 1;
+    tree = plan(code, want, { ...owned }, false);
+    ({ consumed, missing } = planTotals(tree));
+    // At the ceiling, show what one more would run out of — that is why "+" is off.
+    if (want >= max) blocking = planTotals(plan(code, want + 1, { ...owned }, false)).missing;
+  }
+  const shortOf = c => missing[c] || blocking[c] || 0;
+
+  /* ---- left column: stock, doubling as the receipt ---- */
   const socketedTotal = Object.values(report.socketed).reduce((a, b) => a + b, 0);
   const stock = `<div class="stock">
     <div class="stitle">仓库符文 <span class="thin">${s.runeCount} 个 · ${s.runeKinds} 种</span></div>
-    <div class="srows">${RUNES.map(c => matRow(c, true)).join('')}</div>
+    <div class="srows">${RUNES.map(c => matRow(c, consumed[c] || 0, shortOf(c))).join('')}</div>
     <div class="stitle">仓库宝石 <span class="thin">${s.gemCount} 颗</span></div>
     <table class="gemtab">
       <thead><tr><th></th>${GEM_QUALITY.map(q => `<th>${q}</th>`).join('')}</tr></thead>
       <tbody>${Object.entries(GEMS).map(([label, codes]) => `<tr><th>${label}</th>${
-        codes.map((c, i) => `<td class="${ownedOf(c) ? '' : 'zero'}" title="${esc(matZh(c))}">${ownedOf(c) || '—'}</td>`).join('')
-      }</tr>`).join('')}</tbody>
+        codes.map(c => gemCell(c, consumed[c] || 0, shortOf(c))).join('')}</tr>`).join('')}</tbody>
     </table>
     ${socketedTotal ? `<div class="hint">另有 ${socketedTotal} 个已镶在装备里，拿不出来，不计入材料。</div>` : ''}
   </div>`;
 
-  /* ---- right column: the list and the answer ---- */
-  let right;
-  if (!wanted.length) {
-    right = `<div class="empty">点左边任意一个符文，把它加进「我要合成」清单。<br>
-      再点一次加数量，可以同时排好几个目标。</div>`;
-  } else {
-    const basket = `<div class="basket">${wanted.map(([c, n]) => `
-      <span class="bitem">
-        <b>${runeNo(c)} 号 ${esc(matZh(c).replace(/^符文：/, ''))}</b>
-        <button class="bq" data-sub="${c}" title="少一个">−</button>
-        <span class="bn">${n}</span>
-        <button class="bq" data-add="${c}" title="多一个">+</button>
-        <button class="bq del" data-del="${c}" title="从清单里去掉">×</button>
-      </span>`).join('')}
-      <button class="chip" data-clear="1">清空清单</button></div>`;
-
-    // One shared pool across all targets, so two Lo really do cost four Ohm.
-    // Snapshot the pool before each target so a failure can say how far it got.
-    const trees = wanted.map(([code, n]) => {
-      const before = { ...pool };
-      const tree = plan(code, n, pool, false);
-      return { code, n, tree, max: tree.ok ? n : maxMakeable(code, before) };
-    });
-    const consumed = {}, missing = {};
-    trees.forEach(t => planTotals(t.tree, consumed, missing));
-    const ok = trees.every(t => t.tree.ok);
-
-    const detail = trees.map(({ code, n, tree, max }) => `
-      <h3 class="psub">${n} × ${runeNo(code)} 号 ${esc(matZh(code))}
-        <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span>
-        ${tree.ok ? '' : `<span class="cap">这些材料最多凑出 ${max} 个</span>`}</h3>
-      ${ownedOf(code) ? `<div class="hint">${copiesHtml(report.materials[code])}</div>` : ''}
-      <div class="plan">${planTree(tree)}</div>`).join('');
-
-    right = `${basket}
-      <div class="verdict ${ok ? 'good' : 'bad'}">
-        ${ok ? '✅ 材料够，可以合成' : '❌ 材料不够'}
-        <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
-        ${ok ? '' : `<div class="sub">${trees.filter(t => !t.tree.ok)
-          .map(t => `${runeNo(t.code)} 号 ${esc(matZh(t.code).replace(/^符文：/, ''))}：要 ${t.n} 个，这些材料最多凑出 ${t.max} 个`)
-          .join('；')}</div>`}
-        ${ok ? '' : '<div class="sub">（树里点符文名可以把它也加进清单，接着往下追）</div>'}
-      </div>
-      ${detail}`;
+  /* ---- right column: the one target and its answer ---- */
+  if (!code) {
+    return `<div class="cube"><div class="cubeleft">${stock}</div>
+      <div class="cuberight"><h2 class="section">我要合成</h2>
+        <div class="empty">点左边任意一个符文，算算你的材料够不够合出它。</div></div></div>`;
   }
+
+  const ok = tree.ok;
+  const atMax = want >= max;
+  const head = `<div class="basket">
+    <span class="bitem">
+      <button class="bq" data-sub="1"${want <= 1 ? ' disabled' : ''} title="少一个">−</button>
+      <span class="bn">${want}</span>
+      <button class="bq" data-plus="1"${atMax ? ' disabled' : ''}
+        title="${atMax ? '材料只够这么多了' : '多一个'}">+</button>
+      <b>${runeNo(code)} 号 ${esc(matZh(code).replace(/^符文：/, ''))}</b>
+    </span>
+    <button class="chip" data-clear="1">换一个</button>
+    <span class="hint">材料最多能合 ${max} 个${ownedOf(code) ? ` · 仓库里另有 ${ownedOf(code)} 个现货` : ''}</span>
+  </div>`;
 
   return `<div class="cube">
     <div class="cubeleft">${stock}</div>
-    <div class="cuberight"><h2 class="section">我要合成</h2>${right}</div>
+    <div class="cuberight">
+      <h2 class="section">我要合成 <span class="thin">— 一次只算一种符文</span></h2>
+      ${head}
+      <div class="verdict ${ok ? 'good' : 'bad'}">
+        ${ok ? `✅ 材料够，可以合 ${want} 个` : '❌ 材料不够'}
+        <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
+        ${ok ? '' : `<div class="sub">这些材料最多凑出 ${max} 个</div>`}
+      </div>
+      ${ownedOf(code) ? `<div class="hint">现货在：${copiesHtml(report.materials[code])}</div>` : ''}
+      <div class="plan">${planTree(tree)}</div>
+    </div>
   </div>`;
 }
 
@@ -1032,15 +1041,16 @@ $('#filters').addEventListener('click', e => {
 
 /* The cube shopping list: add, subtract, drop, clear. */
 $('#view').addEventListener('click', e => {
-  const b = e.target.closest ? e.target.closest('button[data-add],button[data-sub],button[data-del],button[data-clear]') : null;
+  const b = e.target.closest ? e.target.closest('button[data-add],button[data-sub],button[data-plus],button[data-clear]') : null;
+  if (b && b.disabled) return;
   if (!b) return;
   const d = b.dataset;
-  if (d.clear) state.want = {};
-  else if (d.add) state.want[d.add] = (state.want[d.add] || 0) + 1;
-  else if (d.sub) {
-    const left = (state.want[d.sub] || 0) - 1;
-    if (left > 0) state.want[d.sub] = left; else delete state.want[d.sub];
-  } else if (d.del) delete state.want[d.del];
+  if (d.clear) { state.target = null; state.qty = 1; }
+  else if (d.add) {
+    // Clicking the rune already being solved for asks for one more of it.
+    if (state.target === d.add) state.qty += 1; else { state.target = d.add; state.qty = 1; }
+  } else if (d.plus) state.qty += 1;
+  else if (d.sub) state.qty = Math.max(1, state.qty - 1);
   renderView();
 });
 

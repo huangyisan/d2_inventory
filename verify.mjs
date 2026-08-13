@@ -43,6 +43,7 @@ for (const fn of fs.readdirSync(SAVE_DIR).sort()) {
       eth: it.ethereal,
       sockets: it.sockets,
       socketedIn: it.socketedIn || null,
+      stackCount: it.stackCount || 1,
     })),
   });
 }

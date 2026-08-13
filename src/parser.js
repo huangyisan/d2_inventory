@@ -160,12 +160,17 @@ function readRealmData(r, saveVersion) {
   for (let i = 0; i < count; i++) r.read(32);
 }
 
+/*
+ * The auto-sorting stash tabs (gems / runes / materials) hold stacks, not
+ * single items: one entry can be "6 × Pul Rune". Returns how many the entry
+ * stands for, 1 when there is no stack count.
+ */
 function readAdvancedStash(r, code, saveVersion) {
-  if (saveVersion <= 99) return;
+  if (saveVersion <= 99) return 1;
   if (saveVersion <= 101) {
-    if (!STACKABLE_V100.has(code)) return;
-  } else if (!r.bool()) return;
-  r.read(8);
+    if (!STACKABLE_V100.has(code)) return 1;
+  } else if (!r.bool()) return 1;
+  return Math.max(1, r.read(8));
 }
 
 function readChronicle(r, flags, saveVersion) {
@@ -222,7 +227,7 @@ function readItem(r, cat, saveVersion) {
     identified: !!(flags & F_IDENTIFIED),
     runeword: !!(flags & F_RUNEWORD),
     personalized: !!(flags & F_PERSONALIZED),
-    compact, quality: 'normal', uniqueId: null, setId: null,
+    compact, quality: 'normal', uniqueId: null, setId: null, stackCount: 1,
     itemLevel: null, sockets: 0, code: null, baseName: null, slot: '其他',
   };
 
@@ -252,7 +257,7 @@ function readItem(r, cat, saveVersion) {
       r.read(cat.stat(STAT_QUEST_DIFFICULTY).bits);
     }
     readRealmData(r, saveVersion);
-    readAdvancedStash(r, item.code, saveVersion);
+    item.stackCount = readAdvancedStash(r, item.code, saveVersion);
     item.itemLevel = 1;
     r.align();
     return [item];
@@ -346,7 +351,7 @@ function readItem(r, cat, saveVersion) {
   if (flags & F_RUNEWORD) readStatList(r, cat);
 
   readChronicle(r, flags, saveVersion);
-  readAdvancedStash(r, item.code, saveVersion);
+  item.stackCount = readAdvancedStash(r, item.code, saveVersion);
   r.align();
 
   for (let i = 0; i < socketedCount; i++) {

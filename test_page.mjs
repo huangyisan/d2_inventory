@@ -121,15 +121,23 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
         out.plans[code] = { short: t.ok ? 0 : 1, ...planTotals(t) };
       }
       for (const c of MATERIALS) {
-        const n = (report.materials[c] || []).length;
+        const n = (report.materials[c] || []).reduce((t, x) => t + (x.n || 1), 0);
         if (n) out.inv[matZh(c)] = n;
       }
+      out.counts = { runes: report.summary.runeCount, gems: report.summary.gemCount,
+                     pul: (report.materials.r21 || []).reduce((t, x) => t + (x.n || 1), 0) };
       return out;
     };
   `, ctx);
   const cube = ctx.__cube(report);
   console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
-  console.log(`  当前材料：${JSON.stringify(cube.inv, null, 0)}`);
+  console.log(`  当前材料：符文 ${cube.counts.runes} 个 · 宝石 ${cube.counts.gems} 颗`);
+  // The auto-sorting stash tabs stack: one entry can be six runes. Counting
+  // entries instead of stack sizes used to report a single Pul here.
+  if (cube.counts.pul !== 6) { console.error(`✗ 普尔应为 6 个（堆叠），实际 ${cube.counts.pul}`); ok = false; }
+  if (cube.counts.runes !== 513 || cube.counts.gems !== 1064) {
+    console.error(`✗ 符文/宝石总数不符: ${cube.counts.runes}/${cube.counts.gems}`); ok = false;
+  }
 
   // A rune you already hold must plan to "just take it", costing nothing else.
   for (const [code, p] of Object.entries(cube.plans)) {

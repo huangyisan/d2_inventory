@@ -415,6 +415,7 @@ def read_item(r, gd, save_version):
         "personalized_name": None,
         "compact": compact,
         "quality": "normal",
+        "stack_count": 1,
         "unique_id": None,
         "set_id": None,
         "item_level": None,
@@ -454,7 +455,7 @@ def read_item(r, gd, save_version):
             info = gd.stat_info(STAT_QUEST_DIFFICULTY)
             r.read(info["save_bits"])
         read_realm_data(r, save_version)
-        read_advanced_stash(r, item["code"], save_version)
+        item["stack_count"] = read_advanced_stash(r, item["code"], save_version)
         item["item_level"] = 1
         item["quality"] = "normal"
         r.align()
@@ -572,7 +573,7 @@ def read_item(r, gd, save_version):
         read_stat_list(r, gd)
 
     read_chronicle(r, flags, save_version)
-    read_advanced_stash(r, item["code"], save_version)
+    item["stack_count"] = read_advanced_stash(r, item["code"], save_version)
 
     r.align()
 
@@ -595,15 +596,20 @@ def read_realm_data(r, save_version):
 
 
 def read_advanced_stash(r, code, save_version):
+    """
+    The auto-sorting stash tabs (gems / runes / materials) hold stacks, not
+    single items: one entry can be "6 x Pul Rune". Returns how many the entry
+    stands for, 1 when there is no stack count.
+    """
     if save_version <= 99:
-        return
+        return 1
     if save_version <= 101:
         if code not in STACKABLE_V100:
-            return
+            return 1
     else:
         if not r.bool():
-            return
-    r.read(8)
+            return 1
+    return max(1, r.read(8))
 
 
 def read_chronicle(r, flags, save_version):

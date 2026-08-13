@@ -34,6 +34,7 @@ for src in sources:
             "eth": it.get("ethereal", False),
             "sockets": it.get("sockets", 0),
             "socketedIn": it.get("socketed_in"),
+            "stackCount": it.get("stack_count", 1),
         } for it in src["items"]],
     })
 

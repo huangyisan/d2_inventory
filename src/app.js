@@ -174,6 +174,9 @@ async function parseFiles(files) {
 /* ------------------------------------------------------------------ */
 /* Cross-reference against the catalogue                               */
 /* ------------------------------------------------------------------ */
+// Total pieces in a material's copy list, counting each stack in full.
+const tally = list => (list || []).reduce((n, c) => n + (c.n || 1), 0);
+
 function buildReport(sources) {
   const uniques = CATALOG.uniques.map(u => ({ ...u, copies: [], count: 0, owned: false }));
   const sets = CATALOG.sets.map(g => ({
@@ -211,8 +214,10 @@ function buildReport(sources) {
         ilvl: it.itemLevel,
       };
       if (MATERIALS.has(it.code)) {
-        if (it.socketedIn) socketed[it.code] = (socketed[it.code] || 0) + 1;
-        else (materials[it.code] = materials[it.code] || []).push(copy);
+        // One entry in the auto-sorting stash tabs can be a stack of many.
+        const n = it.stackCount || 1;
+        if (it.socketedIn) socketed[it.code] = (socketed[it.code] || 0) + n;
+        else (materials[it.code] = materials[it.code] || []).push({ ...copy, n });
       }
       if (it.runeword && CATALOG.runewords[it.runewordId]) {
         const [en, zh] = CATALOG.runewords[it.runewordId];
@@ -282,10 +287,10 @@ function buildReport(sources) {
       dupeKinds: uniques.filter(u => u.count > 1).length + pieces.filter(p => p.count > 1).length,
       dupeCopies: uniques.reduce((n, u) => n + Math.max(0, u.count - 1), 0) +
                   pieces.reduce((n, p) => n + Math.max(0, p.count - 1), 0),
-      runeCount: RUNES.reduce((n, c) => n + (materials[c] || []).length, 0),
-      runeKinds: RUNES.filter(c => (materials[c] || []).length).length,
-      gemCount: GEM_CODES.reduce((n, c) => n + (materials[c] || []).length, 0),
-      topRune: RUNES.filter(c => (materials[c] || []).length).pop() || null,
+      runeCount: RUNES.reduce((n, c) => n + tally(materials[c]), 0),
+      runeKinds: RUNES.filter(c => tally(materials[c])).length,
+      gemCount: GEM_CODES.reduce((n, c) => n + tally(materials[c]), 0),
+      topRune: RUNES.filter(c => tally(materials[c])).pop() || null,
       files: sourceRows.filter(s => s.type !== 'error').length,
       totalItems: sourceRows.reduce((n, s) => n + s.items, 0),
     },
@@ -501,6 +506,7 @@ function copiesHtml(copies) {
       head = esc(c.source);
       tail = [esc(c.where)];
     }
+    if (c.n > 1) tail.push(`${c.n} 个一摞`);
     if (c.ethereal) tail.push('虚空');
     if (c.sockets) tail.push(c.sockets + '孔');
     return `<b class="who">${head}</b>${tail.filter(Boolean).length ? ' · ' + tail.filter(Boolean).join(' · ') : ''}`;
@@ -844,8 +850,9 @@ function viewChars() {
 /* ------------------------------------------------------------------ */
 /* Cube planner                                                        */
 /* ------------------------------------------------------------------ */
+// Stacks count as their full size, not as one entry.
 function ownedOf(code) {
-  return (report.materials[code] || []).length;
+  return (report.materials[code] || []).reduce((n, c) => n + (c.n || 1), 0);
 }
 
 function matCell(code, selectable) {

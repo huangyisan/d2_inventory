@@ -14,7 +14,8 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
-let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', cube: 'r28' };
+let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', want: {} };
+// want: the shopping list — rune code -> how many of it you want to end up with.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -858,18 +859,18 @@ function ownedOf(code) {
 function matCell(code, selectable) {
   const n = ownedOf(code);
   const no = runeNo(code);
-  const sel = selectable && state.cube === code;
-  return `<button class="mat${n ? '' : ' zero'}${sel ? ' on' : ''}"${selectable ? ` data-cube="${code}"` : ''}
-    title="${esc(matEn(code))}">
+  const want = state.want[code] || 0;
+  return `<button class="mat${n ? '' : ' zero'}${want ? ' on' : ''}"${selectable ? ` data-add="${code}"` : ''}
+    title="${esc(matEn(code))}${selectable ? ' — 点一下加入合成清单' : ''}">
     ${no ? `<span class="no">${no}</span>` : ''}
     <span class="mn">${esc(matZh(code).replace(/^符文：/, ''))}</span>
-    <span class="mc">${n || '—'}</span></button>`;
+    <span class="mc">${n || '—'}${want ? ` <span class="wq">要${want}</span>` : ''}</span></button>`;
 }
 
 /*
  * A working branch is unrolled in full. A broken one is shown one level deep —
- * just far enough to see which step fails — and you drill in by picking that
- * rune as the new target.
+ * just far enough to see which step fails — and you drill in by adding that
+ * rune to the list yourself.
  */
 function planTree(node, canExpandBroken = true) {
   const bits = [];
@@ -884,53 +885,73 @@ function planTree(node, canExpandBroken = true) {
   const kids = expand
     ? `<div class="kids">${node.children.map(c => planTree(c, false)).join('')}</div>` : '';
   const name = RUNES.includes(node.code)
-    ? `<button class="lk" data-cube="${node.code}">${esc(matZh(node.code))}</button>`
+    ? `<button class="lk" data-add="${node.code}" title="加入合成清单">${esc(matZh(node.code))}</button>`
     : esc(matZh(node.code));
   return `<div class="pnode${node.ok ? '' : ' bad'}">
     <div class="prow"><b>${node.qty} ×</b> ${name} ${bits.join(' ')}</div>${kids}</div>`;
 }
 
+const matList = obj => Object.entries(obj)
+  .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
+  .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
+
 function viewCube() {
-  const target = state.cube;
+  const s = report.summary;
+  // Everything you own is the starting material; the list is what you want out.
   const pool = {};
   for (const code of MATERIALS) pool[code] = ownedOf(code);
-  const tree = plan(target, 1, pool);
-  const { consumed, missing } = planTotals(tree);
-  const ok = tree.ok;
-  const s = report.summary;
 
-  const consumedList = Object.entries(consumed)
-    .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
-    .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
-  const missingList = Object.entries(missing)
-    .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
-    .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
+  // Expensive targets first, so they get first claim on the shared material.
+  const wanted = Object.entries(state.want).filter(([, n]) => n > 0)
+    .sort((a, b) => RUNES.indexOf(b[0]) - RUNES.indexOf(a[0]));
 
-  const where = (report.materials[target] || []).length
-    ? `<div class="hint">已经有 ${ownedOf(target)} 个：${copiesHtml(report.materials[target])}</div>` : '';
-
-  const socketedNote = Object.keys(report.socketed).length
-    ? `<div class="hint">另有 ${Object.values(report.socketed).reduce((a, b) => a + b, 0)} 个符文/宝石已经镶在装备里，不计入可用材料。</div>` : '';
-
-  return `<h2 class="section">选一个目标符文 <span class="thin">— 共有 ${s.runeCount} 个符文（${s.runeKinds} 种）、${s.gemCount} 颗宝石</span></h2>
-    <div class="matgrid">${RUNES.map(c => matCell(c, true)).join('')}</div>
-
-    <h2 class="section">${runeNo(target)} 号 · ${esc(matZh(target))}
-      <span class="thin">— ${esc(matEn(target))}</span></h2>
-    <div class="verdict ${ok ? 'good' : 'bad'}">
-      ${tree.have ? '✅ 已经有了，不用合成' : ok ? '✅ 可以合成！' : '❌ 材料不够'}
-      ${ok ? (tree.have ? '' : `<div class="sub">将消耗：${consumedList}</div>`)
-           : `<div class="sub">还差：${missingList}</div>
-              <div class="sub">（下面的树里，点符文名可以把它设成新目标，接着往下看差在哪）</div>`}
-    </div>
-    ${where}
-    <div class="plan">${planTree(tree)}</div>
-
-    <h2 class="section">宝石库存</h2>
+  const grid = `<div class="matgrid">${RUNES.map(c => matCell(c, true)).join('')}</div>`;
+  const gems = `<h2 class="section">宝石库存 <span class="thin">— 合成时按需消耗</span></h2>
     ${Object.entries(GEMS).map(([label, codes]) =>
       `<div class="gemrow"><span class="gl">${label}</span>
         <div class="matgrid">${codes.map(c => matCell(c, false)).join('')}</div></div>`).join('')}
-    ${socketedNote}`;
+    ${Object.keys(report.socketed).length
+      ? `<div class="hint">另有 ${Object.values(report.socketed).reduce((a, b) => a + b, 0)} 个符文/宝石已经镶在装备里，拿不出来，不计入可用材料。</div>` : ''}`;
+
+  const head = `<h2 class="section">点符文加进合成清单
+      <span class="thin">— 仓库里共有 ${s.runeCount} 个符文（${s.runeKinds} 种）、${s.gemCount} 颗宝石，作为起始材料</span></h2>${grid}`;
+
+  if (!wanted.length) {
+    return `${head}<div class="empty">点上面任意一个符文，把它加进「我要合成」清单，可以点多次加数量。</div>${gems}`;
+  }
+
+  const basket = `<div class="basket">${wanted.map(([c, n]) => `
+    <span class="bitem">
+      <b>${runeNo(c)} 号 ${esc(matZh(c).replace(/^符文：/, ''))}</b>
+      <button class="bq" data-sub="${c}" title="少一个">−</button>
+      <span class="bn">${n}</span>
+      <button class="bq" data-add="${c}" title="多一个">+</button>
+      <button class="bq del" data-del="${c}" title="从清单里去掉">×</button>
+    </span>`).join('')}
+    <button class="chip" data-clear="1">清空清单</button></div>`;
+
+  // One shared pool across all targets, so two Lo really do cost four Ohm.
+  const trees = wanted.map(([code, n]) => ({ code, n, tree: plan(code, n, pool) }));
+  const consumed = {}, missing = {};
+  trees.forEach(t => planTotals(t.tree, consumed, missing));
+  const ok = trees.every(t => t.tree.ok);
+
+  const detail = trees.map(({ code, n, tree }) => `
+    <h3 class="psub">${n} × ${runeNo(code)} 号 ${esc(matZh(code))}
+      <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span></h3>
+    ${ownedOf(code) ? `<div class="hint">${copiesHtml(report.materials[code])}</div>` : ''}
+    <div class="plan">${planTree(tree)}</div>`).join('');
+
+  return `${head}
+    <h2 class="section">我要合成</h2>
+    ${basket}
+    <div class="verdict ${ok ? 'good' : 'bad'}">
+      ${ok ? '✅ 材料够，可以合成' : '❌ 材料不够'}
+      <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
+      ${ok ? '' : '<div class="sub">（树里点符文名可以把它也加进清单，接着往下追）</div>'}
+    </div>
+    ${detail}
+    ${gems}`;
 }
 
 // Cheapest first, so the consumed/missing lists read high-value material last.
@@ -968,10 +989,17 @@ $('#filters').addEventListener('click', e => {
   renderFilters(); renderView();
 });
 
+/* The cube shopping list: add, subtract, drop, clear. */
 $('#view').addEventListener('click', e => {
-  const b = e.target.closest ? e.target.closest('button[data-cube]') : null;
+  const b = e.target.closest ? e.target.closest('button[data-add],button[data-sub],button[data-del],button[data-clear]') : null;
   if (!b) return;
-  state.cube = b.dataset.cube;
+  const d = b.dataset;
+  if (d.clear) state.want = {};
+  else if (d.add) state.want[d.add] = (state.want[d.add] || 0) + 1;
+  else if (d.sub) {
+    const left = (state.want[d.sub] || 0) - 1;
+    if (left > 0) state.want[d.sub] = left; else delete state.want[d.sub];
+  } else if (d.del) delete state.want[d.del];
   renderView();
 });
 

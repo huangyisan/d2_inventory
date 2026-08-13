@@ -112,8 +112,12 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
     globalThis.__cube = function (rep) {
       report = rep;
       const out = { views: 0, inv: {}, plans: {} };
+      // Empty list first: it must render its own prompt, not blow up.
+      state.tab = 'cube'; state.want = {};
+      renderView();
+      if (!($('#view').innerHTML || '').length) throw new Error('empty basket view');
       for (const code of RUNES) {
-        state.tab = 'cube'; state.cube = code;
+        state.tab = 'cube'; state.want = { [code]: 1 };
         if (!renderView() && !($("#view").innerHTML || "").length) throw new Error('empty ' + code);
         out.views++;
         const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
@@ -126,10 +130,16 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       }
       out.counts = { runes: report.summary.runeCount, gems: report.summary.gemCount,
                      pul: (report.materials.r21 || []).reduce((t, x) => t + (x.n || 1), 0) };
+      // A basket of several targets shares one material pool.
+      state.want = { r22: 1, r25: 1 };
+      renderView();
+      out.basketLen = ($('#view').innerHTML || '').length;
+      state.want = {};
       return out;
     };
   `, ctx);
   const cube = ctx.__cube(report);
+  if (!cube.basketLen) { console.error('✗ 多目标清单渲染为空'); ok = false; }
   console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
   console.log(`  当前材料：符文 ${cube.counts.runes} 个 · 宝石 ${cube.counts.gems} 颗`);
   // The auto-sorting stash tabs stack: one entry can be six runes. Counting

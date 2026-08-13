@@ -77,6 +77,7 @@ for (const [k, v] of Object.entries(expected)) {
 vm.runInContext(`
   globalThis.__renderAll = function (rep) {
     report = rep;
+    state.mode = 'gear';
     const out = {};
     for (const [tab] of TABS()) {
       state.tab = tab;
@@ -95,29 +96,38 @@ vm.runInContext(`
       }
     }
     state.q = ''; state.only = 'all'; state.slot = null;
-    renderTop(); renderTabs();
+    renderModes(); renderTop(); renderTabs();
+    // The rune mode has its own cards and no tab bar.
+    state.mode = 'runes'; renderModes(); renderTop(); renderTabs(); renderFilters();
+    out.runeCards = ($('#cards').innerHTML || '').includes('手上最高的符文');
+    out.noTabs = !($('#tabs').innerHTML || '').length;
+    state.mode = 'gear'; renderTop(); renderTabs();
     return out;
   };
 `, ctx);
 
 const sizes = ctx.__renderAll(report);
-for (const [tab, len] of Object.entries(sizes)) {
+const { runeCards, noTabs, ...tabSizes } = sizes;
+for (const [tab, len] of Object.entries(tabSizes)) {
   if (!len) { console.error(`✗ 视图 ${tab} 渲染为空`); ok = false; }
 }
-console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).join('/')}) × 搜索/筛选组合渲染均无异常`);
+if (!runeCards) { console.error('✗ 符文模式没有换成符文的统计卡'); ok = false; }
+if (!noTabs) { console.error('✗ 符文模式不该显示装备的标签页'); ok = false; }
+console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSizes).join('/')}) × 搜索/筛选组合渲染均无异常`);
 
 /* --- cube planner ---------------------------------------------------- */
 {
   vm.runInContext(`
     globalThis.__cube = function (rep) {
       report = rep;
+      state.mode = 'runes';
       const out = { views: 0, inv: {}, plans: {} };
       // No target picked yet: it must render its own prompt, not blow up.
-      state.tab = 'cube'; state.target = null;
+      state.mode = 'runes'; state.target = null;
       renderView();
       if (!($('#view').innerHTML || '').length) throw new Error('empty basket view');
       for (const code of RUNES) {
-        state.tab = 'cube'; state.target = code; state.qty = 1;
+        state.mode = 'runes'; state.target = code; state.qty = 1;
         if (!renderView() && !($("#view").innerHTML || "").length) throw new Error('empty ' + code);
         out.views++;
         const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
@@ -131,7 +141,7 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       out.counts = { runes: report.summary.runeCount, gems: report.summary.gemCount,
                      pul: (report.materials.r21 || []).reduce((t, x) => t + (x.n || 1), 0) };
       // Asking for more than the material allows must clamp, not explode.
-      state.target = 'r22'; state.qty = 99;
+      state.mode = 'runes'; state.target = 'r22'; state.qty = 99;
       renderView();
       out.basketLen = ($('#view').innerHTML || '').length;
       out.clamped = ($('#view').innerHTML || '').includes('可以合 3 个');
@@ -153,7 +163,7 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       // ...and the rune being made counts up: 0 Um -> 1, in green.
       out.gainShown = one.includes('<i class="d up">+1</i>') && /tile[^"]*gain/.test(one);
       out.gainInVerdict = one.includes('22 号 0 → 1');
-      state.target = null; state.qty = 1;
+      state.target = null; state.qty = 1; state.mode = 'gear';
       return out;
     };
   `, ctx);
@@ -223,10 +233,10 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   // El has no recipe at all; the page must say so rather than "还差 1 个".
   vm.runInContext(`
     globalThis.__el = function () {
-      state.tab = 'cube'; state.target = 'r01'; state.qty = 1;
+      state.mode = 'runes'; state.target = 'r01'; state.qty = 1;
       renderView();
       const h = $('#view').innerHTML || '';
-      state.target = null;
+      state.target = null; state.mode = 'gear';
       return { saysNoRecipe: h.includes('没有合成配方'), saysShort: h.includes('材料不够') };
     };
   `, ctx);

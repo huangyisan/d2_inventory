@@ -76,6 +76,15 @@
   .bar i { display: block; height: 100%; background: var(--gold); }
   .bar.g i { background: var(--green); }
 
+  /* Top-level split: gear collecting vs the rune cube. */
+  .modes { display: flex; gap: 8px; margin: 20px 0 2px; }
+  button.mode {
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 9px 20px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 10px;
+  }
+  button.mode[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.mode:hover { color: var(--ink); }
+  button.mode[aria-selected="true"]:hover { color: var(--bg); }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
              position: sticky; top: 0; background: var(--bg); padding: 10px 0; z-index: 5;
              border-bottom: 1px solid var(--line); }
@@ -272,9 +281,10 @@
   </div>
 
   <div id="main" hidden>
+    <div class="modes" id="modes"></div>
     <div class="cards" id="cards"></div>
     <div id="warnings"></div>
-    <div class="toolbar">
+    <div class="toolbar" id="toolbar">
       <div class="tabs" id="tabs"></div>
       <input type="search" id="q" placeholder="搜索物品 / 套装 / 小号名…（中英文皆可）">
     </div>

@@ -76,6 +76,15 @@
   .bar i { display: block; height: 100%; background: var(--gold); }
   .bar.g i { background: var(--green); }
 
+  /* Top-level split: gear collecting vs the rune cube. */
+  .modes { display: flex; gap: 8px; margin: 20px 0 2px; }
+  button.mode {
+    font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; padding: 9px 20px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 10px;
+  }
+  button.mode[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  button.mode:hover { color: var(--ink); }
+  button.mode[aria-selected="true"]:hover { color: var(--bg); }
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
              position: sticky; top: 0; background: var(--bg); padding: 10px 0; z-index: 5;
              border-bottom: 1px solid var(--line); }
@@ -241,7 +250,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="ver" title="构建于 2026-08-13 22:27">31dc7ed+</span>
+    <span class="ver" title="构建于 2026-08-13 22:29">a43e085+</span>
     <h1>暗黑破坏神2 · 收藏台账</h1>
     <div class="status" id="status">选择你的存档文件夹开始。</div>
     <div class="actions">
@@ -272,9 +281,10 @@
   </div>
 
   <div id="main" hidden>
+    <div class="modes" id="modes"></div>
     <div class="cards" id="cards"></div>
     <div id="warnings"></div>
-    <div class="toolbar">
+    <div class="toolbar" id="toolbar">
       <div class="tabs" id="tabs"></div>
       <input type="search" id="q" placeholder="搜索物品 / 套装 / 小号名…（中英文皆可）">
     </div>
@@ -844,7 +854,7 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
-let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', target: null, qty: 1 };
+let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', target: null, qty: 1 };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 
 /* ------------------------------------------------------------------ */
@@ -1330,10 +1340,13 @@ document.addEventListener('drop', async e => {
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
-const ALL_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
-  ['dupes', '重复清理'], ['cube', '符文合成']];
+// Two things this tool does, kept apart: collecting gear, and cubing runes.
+const MODES = [['gear', '装备收藏'], ['runes', '符文合成']];
+const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
+  ['dupes', '重复清理']];
 // The chronicle tab only exists in D2R saves that have one.
-const TABS = () => ALL_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle);
+const TABS = () => (state.mode === 'runes' ? []
+  : GEAR_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle));
 
 function hit(entry, q) {
   if (!q) return true;
@@ -1481,8 +1494,31 @@ document.addEventListener('click', e => {
 });
 window.addEventListener('scroll', hideTip, true);
 
+function renderModes() {
+  $('#modes').innerHTML = MODES.map(([k, l]) =>
+    `<button class="mode" data-mode="${k}" aria-selected="${state.mode === k}">${l}</button>`).join('');
+}
+
 function renderTop() {
   const s = report.summary;
+  if (state.mode === 'runes') {
+    $('#cards').innerHTML = `
+      <div class="card">
+        <div class="n">${s.runeCount}</div><div class="l">符文</div>
+        <div class="sub">${s.runeKinds} / 33 种</div>
+      </div>
+      <div class="card">
+        <div class="n">${s.gemCount}</div><div class="l">宝石</div>
+        <div class="sub">7 色 × 5 级</div>
+      </div>
+      <div class="card">
+        <div class="n" style="color:var(--gold)">${s.topRune ? runeNo(s.topRune) : '—'}</div>
+        <div class="l">手上最高的符文</div>
+        <div class="sub">${s.topRune ? esc(matZh(s.topRune)) : '一个符文都没有'}</div>
+      </div>`;
+    $('#warnings').innerHTML = '';
+    return;
+  }
   const pctU = Math.round(s.uniqueOwned / s.uniqueTotal * 100);
   const pctS = Math.round(s.setOwned / s.setTotal * 100);
   $('#cards').innerHTML = `
@@ -1519,11 +1555,15 @@ function renderTop() {
 }
 
 function renderTabs() {
-  $('#tabs').innerHTML = TABS().map(([k, l]) =>
+  const tabs = TABS();
+  $('#tabs').innerHTML = tabs.map(([k, l]) =>
     `<button class="tab" data-tab="${k}" aria-selected="${state.tab === k}">${l}</button>`).join('');
+  // The cube page has nothing to search or filter, so the whole bar goes away.
+  $('#toolbar').hidden = !tabs.length;
 }
 
 function renderFilters() {
+  if (state.mode === 'runes') { $('#filters').innerHTML = ''; return; }
   const showSlot = state.tab === 'uniques' || state.tab === 'lost';
   const showOnly = state.tab === 'uniques' || state.tab === 'sets';
   let html = '';
@@ -1838,8 +1878,8 @@ const MATERIALS_ORDER = [...GEM_CODES, ...RUNES];
 function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
-  const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost,
-    dupes: viewDupes, cube: viewCube };
+  if (state.mode === 'runes') { $('#view').innerHTML = viewCube(); return; }
+  const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost, dupes: viewDupes };
   $('#view').innerHTML = fn[state.tab]();
 }
 
@@ -1848,8 +1888,15 @@ function render() {
   $('#main').hidden = false;
   const s = report.summary;
   setStatus(`已读取 ${s.files} 个存档文件 · ${s.totalItems} 件物品 · ${report.scannedAt}`);
-  renderTop(); renderTabs(); renderFilters(); renderView();
+  renderModes(); renderTop(); renderTabs(); renderFilters(); renderView();
 }
+
+$('#modes').addEventListener('click', e => {
+  const b = e.target.closest ? e.target.closest('button[data-mode]') : null;
+  if (!b || b.dataset.mode === state.mode) return;
+  state.mode = b.dataset.mode;
+  renderModes(); renderTop(); renderTabs(); renderFilters(); renderView();
+});
 
 $('#tabs').addEventListener('click', e => {
   const b = e.target.closest('button[data-tab]');

@@ -253,6 +253,16 @@
   h3.psub .thin { color: var(--muted); font-weight: 400; font-size: 12.5px; }
   h3.psub .cap { color: var(--dupe); font-size: 12.5px; font-weight: 400; margin-left: 6px; }
   h3.psub .thin { color: var(--muted); font-weight: 400; font-size: 12.5px; }
+  /* Back to top: the unique list runs for thousands of pixels. */
+  #totop { position: fixed; right: 20px; bottom: 20px; z-index: 20;
+           width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+           font: inherit; font-size: 17px; line-height: 1;
+           background: var(--panel); color: var(--muted);
+           border: 1px solid var(--line); box-shadow: 0 3px 12px rgba(0,0,0,.14);
+           opacity: 0; visibility: hidden; transition: opacity .18s, visibility .18s, color .18s; }
+  #totop.show { opacity: 1; visibility: visible; }
+  #totop:hover { color: var(--gold); border-color: var(--gold); }
+  @media (max-width: 560px) { #totop { right: 12px; bottom: 12px; } }
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
   [hidden] { display: none !important; }
 </style>
@@ -301,6 +311,8 @@
     <div class="filters" id="filters"></div>
     <div id="view"></div>
   </div>
+
+  <button id="totop" type="button" title="回到顶部" aria-label="回到顶部">↑</button>
 
   <footer>
     物品名称与目录取自游戏数据表；新版本内容若暂无官方中文则显示英文原名。

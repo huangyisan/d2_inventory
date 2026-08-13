@@ -1098,6 +1098,15 @@ document.addEventListener('keydown', e => {
   if (e.key === 'r' && (e.metaKey || e.ctrlKey) && report) { e.preventDefault(); reload(); }
 });
 
+/* Back to top, shown once the page has scrolled a screenful. */
+{
+  const btn = $('#totop');
+  const sync = () => btn.classList[window.scrollY > 600 ? 'add' : 'remove']('show');
+  window.addEventListener('scroll', sync, { passive: true });
+  btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  sync();
+}
+
 /* Re-open the last folder automatically when the browser still allows it. */
 (async () => {
   if (!window.showDirectoryPicker) {

@@ -968,6 +968,25 @@ function viewCube() {
   </div>`;
 
   /* ---- right column: the one target and its answer ---- */
+  // El is the bottom of the ladder: nothing cubes into it, so "can you make
+  // one" is not a question that has an answer. Say that instead of "还差 1 个".
+  if (code && !RECIPES[code]) {
+    const n = ownedOf(code);
+    return `<div class="cube"><div class="cubeleft">${stock}</div>
+      <div class="cuberight"><h2 class="section">我要合成 <span class="thin">— 一次只算一种符文</span></h2>
+        <div class="basket">
+          <span class="bitem"><b>${runeNo(code)} 号 ${esc(matZh(code).replace(/^符文：/, ''))}</b></span>
+          <button class="chip" data-clear="1">换一个</button>
+        </div>
+        <div class="verdict">🔨 ${esc(matZh(code))}是最低一级的符文，没有合成配方
+          <div class="sub">只能靠打怪掉落。它是往上合成 ${runeNo(RUNES[1])} 号${
+            esc(matZh(RUNES[1]).replace(/^符文：/, ''))}及以上的起点：3 个换 1 个。</div>
+          <div class="sub">仓库里有 ${n} 个。</div>
+        </div>
+        ${n ? `<div class="hint">现货在：${copiesHtml(report.materials[code])}</div>` : ''}
+      </div></div>`;
+  }
+
   if (!code) {
     return `<div class="cube"><div class="cubeleft">${stock}</div>
       <div class="cuberight"><h2 class="section">我要合成</h2>

@@ -207,6 +207,23 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   }
   const g = ctx.__max('r25');
   if (g.max !== 1) { console.error(`✗ 古尔最多应为 1 个，实际 ${g.max}`); ok = false; }
+  // El has no recipe at all; the page must say so rather than "还差 1 个".
+  vm.runInContext(`
+    globalThis.__el = function () {
+      state.tab = 'cube'; state.target = 'r01'; state.qty = 1;
+      renderView();
+      const h = $('#view').innerHTML || '';
+      state.target = null;
+      return { saysNoRecipe: h.includes('没有合成配方'), saysShort: h.includes('材料不够') };
+    };
+  `, ctx);
+  const elRune = ctx.__el();
+  if (!elRune.saysNoRecipe || elRune.saysShort) {
+    console.error(`✗ 1 号艾尔的说明不对: ${JSON.stringify(elRune)}`); ok = false;
+  } else {
+    console.log('✓ 1 号艾尔：说明「没有合成配方」，不再谎报材料不够');
+  }
+
   // Owning two Ist must not be mistaken for "two Ist are already made".
   const ist = ctx.__max('r24');
   if (ist.max !== 1) { console.error(`✗ 伊司特最多应为 1 个（不算仓库现货），实际 ${ist.max}`); ok = false; }

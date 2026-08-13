@@ -237,7 +237,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="ver" title="构建于 2026-08-13 22:09">447be4e+</span>
+    <span class="ver" title="构建于 2026-08-13 22:13">4772c35+</span>
     <h1>暗黑破坏神2 · 收藏台账</h1>
     <div class="status" id="status">选择你的存档文件夹开始。</div>
     <div class="actions">
@@ -1775,10 +1775,13 @@ function viewCube() {
     max = maxMakeable(code, owned);
     // Never ask for more than the material allows; "+" stops there too.
     want = max > 0 ? Math.min(qty, max) : 1;
-    tree = plan(code, want, { ...owned }, false);
+    // plan() drains the pool it is given, so what is left afterwards is exactly
+    // what one *more* would have to be built from.
+    const rest = { ...owned };
+    tree = plan(code, want, rest, false);
     ({ consumed, missing } = planTotals(tree));
     // At the ceiling, show what one more would run out of — that is why "+" is off.
-    if (want >= max) blocking = planTotals(plan(code, want + 1, { ...owned }, false)).missing;
+    if (want >= max) blocking = planTotals(plan(code, 1, rest, false)).missing;
   }
   // Two different states, and conflating them reads as "cannot make any":
   //   short  — this plan cannot be completed, the material is genuinely missing

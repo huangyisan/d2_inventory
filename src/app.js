@@ -949,10 +949,13 @@ function viewCube() {
     max = maxMakeable(code, owned);
     // Never ask for more than the material allows; "+" stops there too.
     want = max > 0 ? Math.min(qty, max) : 1;
-    tree = plan(code, want, { ...owned }, false);
+    // plan() drains the pool it is given, so what is left afterwards is exactly
+    // what one *more* would have to be built from.
+    const rest = { ...owned };
+    tree = plan(code, want, rest, false);
     ({ consumed, missing } = planTotals(tree));
     // At the ceiling, show what one more would run out of — that is why "+" is off.
-    if (want >= max) blocking = planTotals(plan(code, want + 1, { ...owned }, false)).missing;
+    if (want >= max) blocking = planTotals(plan(code, 1, rest, false)).missing;
   }
   // Two different states, and conflating them reads as "cannot make any":
   //   short  — this plan cannot be completed, the material is genuinely missing

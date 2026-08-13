@@ -140,6 +140,8 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       // At the ceiling the plan still succeeds, so the limiting material is
       // marked "再合一个还差 N" — not red, which would read as "cannot make any".
       out.tightAtMax = ($('#view').innerHTML || '').includes('再合一个还差');
+      // Incremental, not from scratch: one more Um is two more Pul, full stop.
+      out.tightIsIncremental = ($('#view').innerHTML || '').includes('再多要补：符文：普尔 ×2');
       out.noRedAtMax = !($('#view').innerHTML || '').includes('sshort');
       out.okAtMax = ($('#view').innerHTML || '').includes('✅');
       state.target = 'r22'; state.qty = 1; renderView();
@@ -156,6 +158,7 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   if (!cube.clamped) { console.error('✗ 数量没有被材料上限夹住（乌姆应为 3 个）'); ok = false; }
   if (!cube.plusOffAtMax) { console.error('✗ 到上限时「+」没有禁用'); ok = false; }
   if (!cube.tightAtMax) { console.error('✗ 到上限时没有标出「再合一个还差」'); ok = false; }
+  if (!cube.tightIsIncremental) { console.error('✗ 「再多要补」不是按再合一个算的（乌姆应为普尔 ×2）'); ok = false; }
   if (!cube.noRedAtMax) { console.error('✗ 到上限时误把材料标成红色缺料'); ok = false; }
   if (!cube.okAtMax) { console.error('✗ 到上限时判定不该是失败'); ok = false; }
   if (!cube.plusOnBelowMax) { console.error('✗ 未到上限时「+」被误禁用'); ok = false; }

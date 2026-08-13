@@ -106,6 +106,60 @@ for (const [tab, len] of Object.entries(sizes)) {
 }
 console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).join('/')}) × 搜索/筛选组合渲染均无异常`);
 
+/* --- cube planner ---------------------------------------------------- */
+{
+  vm.runInContext(`
+    globalThis.__cube = function (rep) {
+      report = rep;
+      const out = { views: 0, inv: {}, plans: {} };
+      for (const code of RUNES) {
+        state.tab = 'cube'; state.cube = code;
+        if (!renderView() && !($('#view').innerHTML || '').length) throw new Error('empty ' + code);
+        out.views++;
+        const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
+        const t = plan(code, 1, pool);
+        out.plans[code] = { short: t.shortTotal, ...planTotals(t) };
+      }
+      for (const c of MATERIALS) {
+        const n = (report.materials[c] || []).length;
+        if (n) out.inv[matZh(c)] = n;
+      }
+      return out;
+    };
+  `, ctx);
+  const cube = ctx.__cube(report);
+  console.log(`✓ 合成视图：${cube.views} 个符文目标全部渲染 + 求解无异常`);
+  console.log(`  当前材料：${JSON.stringify(cube.inv, null, 0)}`);
+
+  // A rune you already hold must plan to "just take it", costing nothing else.
+  for (const [code, p] of Object.entries(cube.plans)) {
+    const own = (report.materials[code] || []).length;
+    if (own > 0 && (p.short !== 0 || Object.keys(p.consumed).length !== 1)) {
+      console.error(`✗ ${code}: 已持有却给出了多余的合成步骤`); ok = false;
+    }
+  }
+  // El is the bottom of the ladder: 3 El make an Eld, so needing one Eld with an
+  // empty pool must report exactly 3 missing El.
+  const empty = ctx.plan('r02', 1, {});
+  const em = ctx.planTotals(empty).missing;
+  if (em.r01 !== 3 || Object.keys(em).length !== 1) { console.error(`✗ 空库存合成 Eld 的缺口不对: ${JSON.stringify(em)}`); ok = false; }
+  // Lo (28) with nothing at all: dead branches collapse, so the answer is the
+  // direct recipe (2 Ohm + 1 diamond), not billions of El runes.
+  const lo = ctx.planTotals(ctx.plan('r28', 1, {})).missing;
+  if (lo.r27 !== 2 || lo.gsw !== 1 || Object.keys(lo).length !== 2) {
+    console.error(`✗ 空库存合成 Lo 的缺口不对: ${JSON.stringify(lo)}`); ok = false;
+  }
+  console.log(`  空库存造 28 号（罗）直接缺：欧姆 ×${lo.r27}、钻石 ×${lo.gsw}`);
+
+  // Feeding a plan exactly what it asked for must make it succeed...
+  const fed = ctx.planTotals(ctx.plan('r28', 1, { ...lo }));
+  if (Object.keys(fed.missing).length) { console.error('✗ 按缺口补齐材料后仍然合成不了 Lo'); ok = false; }
+  // ...and one item short must still report a gap.
+  const short = ctx.planTotals(ctx.plan('r28', 1, { ...lo, r27: 1 })).missing;
+  if (!Object.keys(short).length) { console.error('✗ 少一个欧姆时没有报缺'); ok = false; }
+  console.log('✓ 合成求解自洽：按缺口补齐即可成，少一件即报缺');
+}
+
 /* --- the backup zip must be a real, extractable archive -------------- */
 {
   const entries = [];

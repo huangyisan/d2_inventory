@@ -154,6 +154,34 @@
   .tooltip .ttier .tprop { color: var(--dim); }
   .tooltip .ttier.on .tprop { color: var(--green); }
   .tooltip .ttier.on .tlabel { color: var(--green); }
+  /* Cube planner */
+  .matgrid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 18px; }
+  .mat { display: flex; flex-direction: column; align-items: center; gap: 1px;
+         min-width: 74px; padding: 6px 8px; cursor: default; font: inherit;
+         background: var(--panel); color: var(--ink);
+         border: 1px solid var(--line); border-radius: 8px; }
+  button.mat[data-cube] { cursor: pointer; }
+  button.mat[data-cube]:hover { border-color: var(--gold); }
+  .mat.zero { color: var(--dim); background: transparent; }
+  .mat.on { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
+  .mat .no { font-size: 10px; color: var(--muted); }
+  .mat.on .no { color: var(--gold); }
+  .mat .mn { font-size: 12.5px; white-space: nowrap; }
+  .mat .mc { font-size: 13px; font-weight: 600; }
+  .gemrow { display: flex; align-items: flex-start; gap: 10px; }
+  .gemrow .gl { color: var(--muted); font-size: 12px; padding-top: 12px; flex: none; width: 18px; }
+  .gemrow .matgrid { margin: 6px 0; }
+  .verdict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px;
+             font-size: 16px; font-weight: 600; margin: 4px 0 12px; }
+  .verdict.good { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+  .verdict.bad { border-color: var(--dupe); background: var(--dupe-bg); color: var(--dupe); }
+  .verdict .sub { font-size: 13px; font-weight: 400; color: var(--ink); margin-top: 5px; }
+  .plan { font-size: 13.5px; }
+  .pnode .prow { padding: 3px 0; }
+  .pnode .kids { margin-left: 16px; padding-left: 12px; border-left: 1px dashed var(--line); }
+  .plan .ok { color: var(--green); font-size: 12px; }
+  .plan .mk { color: var(--muted); font-size: 12px; }
+  .plan .no2 { color: var(--dupe); font-size: 12px; }
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
   [hidden] { display: none !important; }
 </style>
@@ -758,7 +786,98 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
-let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress' };
+let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', cube: 'r28' };
+
+/* ------------------------------------------------------------------ */
+/* Horadric cube: rune and gem upgrade recipes                         */
+/* ------------------------------------------------------------------ */
+// Runes in order; the index+1 is the number players use ("28 号符文" = Lo).
+const RUNES = ['r01', 'r02', 'r03', 'r04', 'r05', 'r06', 'r07', 'r08', 'r09', 'r10', 'r11',
+  'r12', 'r13', 'r14', 'r15', 'r16', 'r17', 'r18', 'r19', 'r20', 'r21', 'r22',
+  'r23', 'r24', 'r25', 'r26', 'r27', 'r28', 'r29', 'r30', 'r31', 'r32', 'r33'];
+
+// Gem codes by type, chipped -> perfect. Amethyst is the odd one out: its
+// flawless code is "gzv", not "glv".
+const GEMS = {
+  紫: ['gcv', 'gfv', 'gsv', 'gzv', 'gpv'],
+  黄: ['gcy', 'gfy', 'gsy', 'gly', 'gpy'],
+  蓝: ['gcb', 'gfb', 'gsb', 'glb', 'gpb'],
+  绿: ['gcg', 'gfg', 'gsg', 'glg', 'gpg'],
+  红: ['gcr', 'gfr', 'gsr', 'glr', 'gpr'],
+  白: ['gcw', 'gfw', 'gsw', 'glw', 'gpw'],
+  骷: ['skc', 'skf', 'sku', 'skl', 'skz'],
+};
+
+/*
+ * Rune upgrades. Below Amn it is 3 of the previous rune; from Amn to Pul it is
+ * 3 plus a gem; from Um upward it is 2 plus a gem of rising quality.
+ */
+const RECIPES = {};
+{
+  const ladder = [
+    // [target, count of previous rune, gem code or null]
+    ['r02', 3, null], ['r03', 3, null], ['r04', 3, null], ['r05', 3, null],
+    ['r06', 3, null], ['r07', 3, null], ['r08', 3, null], ['r09', 3, null],
+    ['r10', 3, null],
+    ['r11', 3, 'gcy'], ['r12', 3, 'gcv'], ['r13', 3, 'gcb'], ['r14', 3, 'gcr'],
+    ['r15', 3, 'gcg'], ['r16', 3, 'gcw'], ['r17', 3, 'gfy'], ['r18', 3, 'gfv'],
+    ['r19', 3, 'gfb'], ['r20', 3, 'gfr'], ['r21', 3, 'gfg'],
+    ['r22', 2, 'gfw'], ['r23', 2, 'gsy'], ['r24', 2, 'gsv'], ['r25', 2, 'gsb'],
+    ['r26', 2, 'gsr'], ['r27', 2, 'gsg'], ['r28', 2, 'gsw'], ['r29', 2, 'gly'],
+    ['r30', 2, 'gzv'], ['r31', 2, 'glb'], ['r32', 2, 'glr'], ['r33', 2, 'glg'],
+  ];
+  for (const [target, n, gem] of ladder) {
+    const prev = RUNES[RUNES.indexOf(target) - 1];
+    RECIPES[target] = [{ code: prev, n }].concat(gem ? [{ code: gem, n: 1 }] : []);
+  }
+  // Three gems of one type and quality make one of the next quality up.
+  for (const codes of Object.values(GEMS)) {
+    for (let i = 1; i < codes.length; i++) RECIPES[codes[i]] = [{ code: codes[i - 1], n: 3 }];
+  }
+}
+
+const GEM_CODES = Object.values(GEMS).flat();
+const MATERIALS = new Set([...RUNES, ...GEM_CODES]);
+const runeNo = code => RUNES.indexOf(code) + 1;
+const matZh = code => (CATALOG.bases[code] ? CATALOG.bases[code][1] || CATALOG.bases[code][0] : code);
+const matEn = code => (CATALOG.bases[code] ? CATALOG.bases[code][0] : code);
+
+/*
+ * Work out what it takes to build `qty` of `code` out of `pool`, spending what
+ * is already owned first and cubing the rest. `pool` is mutated, so the same
+ * gem is never counted twice across two branches of the tree.
+ */
+function plan(code, qty, pool) {
+  const have = Math.min(pool[code] || 0, qty);
+  pool[code] = (pool[code] || 0) - have;
+  const node = { code, qty, have, children: [], missing: 0 };
+  const short = qty - have;
+  if (short > 0) {
+    const recipe = RECIPES[code];
+    if (!recipe) node.missing = short;           // El runes and chipped gems: nothing makes them
+    else node.children = recipe.map(ing => plan(ing.code, ing.n * short, pool));
+  }
+  node.shortTotal = node.missing + node.children.reduce((n, c) => n + c.shortTotal, 0);
+  // How much owned material this branch actually uses. A branch that uses none
+  // is a dead end: there is no point unrolling it down to "446 亿个 El 符文",
+  // the useful answer is "you are short N of this rune".
+  node.used = node.have + node.children.reduce((n, c) => n + c.used, 0);
+  return node;
+}
+
+// A branch worth expanding is one that spends something you own.
+const barren = node => node.used === 0 && node.qty > node.have;
+
+function planTotals(node, consumed = {}, missing = {}, depth = 0) {
+  if (node.have) consumed[node.code] = (consumed[node.code] || 0) + node.have;
+  if (depth > 0 && barren(node)) {
+    missing[node.code] = (missing[node.code] || 0) + (node.qty - node.have);
+    return { consumed, missing };
+  }
+  if (node.missing) missing[node.code] = (missing[node.code] || 0) + node.missing;
+  node.children.forEach(c => planTotals(c, consumed, missing, depth + 1));
+  return { consumed, missing };
+}
 
 /* ------------------------------------------------------------------ */
 /* Remember the chosen folder between visits (handle only, never data) */
@@ -846,6 +965,10 @@ function buildReport(sources) {
 
   const runewords = {};
   const sourceRows = [];
+  // Loose runes and gems, for the cube planner. Anything already socketed into
+  // an item is listed separately: you cannot get it back out.
+  const materials = {};
+  const socketed = {};
   for (const src of sources) {
     let notable = 0;
     for (const it of (src.items || [])) {
@@ -857,6 +980,10 @@ function buildReport(sources) {
         sockets: it.sockets || 0,
         ilvl: it.itemLevel,
       };
+      if (MATERIALS.has(it.code)) {
+        if (it.socketedIn) socketed[it.code] = (socketed[it.code] || 0) + 1;
+        else (materials[it.code] = materials[it.code] || []).push(copy);
+      }
       if (it.runeword && CATALOG.runewords[it.runewordId]) {
         const [en, zh] = CATALOG.runewords[it.runewordId];
         (runewords[it.runewordId] = runewords[it.runewordId] ||
@@ -908,7 +1035,7 @@ function buildReport(sources) {
 
   return {
     scannedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
-    sources: sourceRows, uniques, sets, hasChronicle,
+    sources: sourceRows, uniques, sets, hasChronicle, materials, socketed,
     runewords: Object.values(runewords).sort((a, b) => a.zh.localeCompare(b.zh, 'zh')),
     summary: {
       runewordKinds: Object.keys(runewords).length,
@@ -925,6 +1052,10 @@ function buildReport(sources) {
       dupeKinds: uniques.filter(u => u.count > 1).length + pieces.filter(p => p.count > 1).length,
       dupeCopies: uniques.reduce((n, u) => n + Math.max(0, u.count - 1), 0) +
                   pieces.reduce((n, p) => n + Math.max(0, p.count - 1), 0),
+      runeCount: RUNES.reduce((n, c) => n + (materials[c] || []).length, 0),
+      runeKinds: RUNES.filter(c => (materials[c] || []).length).length,
+      gemCount: GEM_CODES.reduce((n, c) => n + (materials[c] || []).length, 0),
+      topRune: RUNES.filter(c => (materials[c] || []).length).pop() || null,
       files: sourceRows.filter(s => s.type !== 'error').length,
       totalItems: sourceRows.reduce((n, s) => n + s.items, 0),
     },
@@ -1114,7 +1245,7 @@ document.addEventListener('drop', async e => {
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
 const ALL_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
-  ['owned', '我的收藏'], ['dupes', '重复清理'], ['chars', '按小号']];
+  ['owned', '我的收藏'], ['dupes', '重复清理'], ['cube', '符文合成'], ['chars', '按小号']];
 // The chronicle tab only exists in D2R saves that have one.
 const TABS = () => ALL_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle);
 
@@ -1480,11 +1611,93 @@ function viewChars() {
   }).join('');
 }
 
+/* ------------------------------------------------------------------ */
+/* Cube planner                                                        */
+/* ------------------------------------------------------------------ */
+function ownedOf(code) {
+  return (report.materials[code] || []).length;
+}
+
+function matCell(code, selectable) {
+  const n = ownedOf(code);
+  const no = runeNo(code);
+  const sel = selectable && state.cube === code;
+  return `<button class="mat${n ? '' : ' zero'}${sel ? ' on' : ''}"${selectable ? ` data-cube="${code}"` : ''}
+    title="${esc(matEn(code))}">
+    ${no ? `<span class="no">${no}</span>` : ''}
+    <span class="mn">${esc(matZh(code).replace(/^符文：/, ''))}</span>
+    <span class="mc">${n || '—'}</span></button>`;
+}
+
+function planTree(node, depth = 0) {
+  const need = node.qty;
+  const dead = depth > 0 && barren(node);
+  const bits = [];
+  if (node.have) bits.push(`<span class="ok">现有 ${node.have}</span>`);
+  if (dead) {
+    bits.push(`<span class="no2">缺 ${need - node.have}</span>`);
+  } else {
+    const made = need - node.have - node.missing;
+    if (made) bits.push(`<span class="mk">合成 ${made}</span>`);
+    if (node.missing) bits.push(`<span class="no2">缺 ${node.missing}</span>`);
+  }
+  const kids = !dead && node.children.length
+    ? `<div class="kids">${node.children.map(c => planTree(c, depth + 1)).join('')}</div>` : '';
+  return `<div class="pnode">
+    <div class="prow"><b>${need} ×</b> ${esc(matZh(node.code))} ${bits.join(' ')}</div>${kids}</div>`;
+}
+
+function viewCube() {
+  const target = state.cube;
+  const pool = {};
+  for (const code of MATERIALS) pool[code] = ownedOf(code);
+  const tree = plan(target, 1, pool);
+  const { consumed, missing } = planTotals(tree);
+  const ok = tree.shortTotal === 0;
+  const s = report.summary;
+
+  const consumedList = Object.entries(consumed)
+    .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
+    .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
+  const missingList = Object.entries(missing)
+    .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
+    .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
+
+  const where = (report.materials[target] || []).length
+    ? `<div class="hint">已经有 ${ownedOf(target)} 个：${copiesHtml(report.materials[target])}</div>` : '';
+
+  const socketedNote = Object.keys(report.socketed).length
+    ? `<div class="hint">另有 ${Object.values(report.socketed).reduce((a, b) => a + b, 0)} 个符文/宝石已经镶在装备里，不计入可用材料。</div>` : '';
+
+  return `<h2 class="section">选一个目标符文 <span class="thin">— 共有 ${s.runeCount} 个符文（${s.runeKinds} 种）、${s.gemCount} 颗宝石</span></h2>
+    <div class="matgrid">${RUNES.map(c => matCell(c, true)).join('')}</div>
+
+    <h2 class="section">${runeNo(target)} 号 · ${esc(matZh(target))}
+      <span class="thin">— ${esc(matEn(target))}</span></h2>
+    <div class="verdict ${ok ? 'good' : 'bad'}">
+      ${tree.have ? '✅ 已经有了，不用合成' : ok ? '✅ 可以合成！' : '❌ 材料不够'}
+      ${ok ? (tree.have ? '' : `<div class="sub">将消耗：${consumedList}</div>`)
+           : `<div class="sub">还需要补：${missingList}</div>
+              <div class="sub">已能凑出的部分会消耗：${consumedList || '无'}</div>`}
+    </div>
+    ${where}
+    <div class="plan">${planTree(tree)}</div>
+
+    <h2 class="section">宝石库存</h2>
+    ${Object.entries(GEMS).map(([label, codes]) =>
+      `<div class="gemrow"><span class="gl">${label}</span>
+        <div class="matgrid">${codes.map(c => matCell(c, false)).join('')}</div></div>`).join('')}
+    ${socketedNote}`;
+}
+
+// Cheapest first, so the consumed/missing lists read high-value material last.
+const MATERIALS_ORDER = [...GEM_CODES, ...RUNES];
+
 function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
   const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost,
-    owned: viewOwned, dupes: viewDupes, chars: viewChars };
+    owned: viewOwned, dupes: viewDupes, cube: viewCube, chars: viewChars };
   $('#view').innerHTML = fn[state.tab]();
 }
 
@@ -1510,6 +1723,13 @@ $('#filters').addEventListener('click', e => {
   if (b.dataset.slot !== undefined) state.slot = b.dataset.slot || null;
   if (b.dataset.sort !== undefined) state.sort = b.dataset.sort;
   renderFilters(); renderView();
+});
+
+$('#view').addEventListener('click', e => {
+  const b = e.target.closest ? e.target.closest('button[data-cube]') : null;
+  if (!b) return;
+  state.cube = b.dataset.cube;
+  renderView();
 });
 
 $('#q').addEventListener('input', e => {

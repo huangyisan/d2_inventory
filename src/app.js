@@ -13,6 +13,7 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 
 let report = null;
 let dirHandle = null;
+let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress' };
 
 /* ------------------------------------------------------------------ */
@@ -54,10 +55,14 @@ async function filesFromDirectory(handle) {
 async function parseFiles(files) {
   files.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   const sources = [];
+  backupSet = [];
   for (const f of files) {
     let data;
     try {
       data = new Uint8Array(await (await f.getFile()).arrayBuffer());
+      // Keep the raw bytes around so "备份存档" can repackage exactly what was
+      // read, without touching the folder again.
+      backupSet.push({ name: f.name, data });
     } catch (err) {
       sources.push({ source: f.name, sourceType: 'error', error: `无法读取: ${err.message}`, items: [], warnings: [] });
       continue;
@@ -188,6 +193,94 @@ function buildReport(sources) {
 function setStatus(msg, busy) {
   $('#status').innerHTML = msg;
   $('#reload').disabled = !dirHandle || !!busy;
+  $('#backup').disabled = !backupSet.length || !!busy;
+}
+
+/* ------------------------------------------------------------------ */
+/* Backup: repackage the files just read into a zip and download it     */
+/* ------------------------------------------------------------------ */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+/*
+ * Minimal store-only (uncompressed) zip writer. Save files are tiny and this
+ * keeps the page dependency-free; store-only archives open everywhere.
+ */
+function makeZip(entries, when) {
+  const enc = new TextEncoder();
+  // DOS date/time, the only timestamp format a zip local header carries.
+  const dosTime = ((when.getHours() << 11) | (when.getMinutes() << 5) | (when.getSeconds() >> 1)) & 0xFFFF;
+  const dosDate = (((when.getFullYear() - 1980) << 9) | ((when.getMonth() + 1) << 5) | when.getDate()) & 0xFFFF;
+
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  const u16 = v => [v & 0xFF, (v >>> 8) & 0xFF];
+  const u32 = v => [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF];
+
+  for (const { name, data } of entries) {
+    const nameBytes = enc.encode(name);
+    const crc = crc32(data);
+    const head = Uint8Array.from([
+      ...u32(0x04034B50), ...u16(20), ...u16(0x0800),  // 0x0800: name is UTF-8
+      ...u16(0), ...u16(dosTime), ...u16(dosDate),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(nameBytes.length), ...u16(0),
+    ]);
+    central.push(Uint8Array.from([
+      ...u32(0x02014B50), ...u16(20), ...u16(20), ...u16(0x0800),
+      ...u16(0), ...u16(dosTime), ...u16(dosDate),
+      ...u32(crc), ...u32(data.length), ...u32(data.length),
+      ...u16(nameBytes.length), ...u16(0), ...u16(0),
+      ...u16(0), ...u16(0), ...u32(0), ...u32(offset),
+      ...nameBytes,
+    ]));
+    parts.push(head, nameBytes, data);
+    offset += head.length + nameBytes.length + data.length;
+  }
+
+  const dirSize = central.reduce((n, c) => n + c.length, 0);
+  const end = Uint8Array.from([
+    ...u32(0x06054B50), ...u16(0), ...u16(0),
+    ...u16(entries.length), ...u16(entries.length),
+    ...u32(dirSize), ...u32(offset), ...u16(0),
+  ]);
+  return new Blob([...parts, ...central, end], { type: 'application/zip' });
+}
+
+function stamp(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+function backupNow() {
+  if (!backupSet.length) return;
+  const when = new Date();
+  const folder = `d2r-存档备份-${stamp(when)}`;
+  const blob = makeZip(backupSet.map(f => ({ name: `${folder}/${f.name}`, data: f.data })), when);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${folder}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  const kb = Math.round(blob.size / 1024);
+  setStatus(`已导出备份：${esc(folder)}.zip（${backupSet.length} 个文件，约 ${kb} KB）。`);
 }
 
 async function loadFromHandle(handle, { prompt = false } = {}) {
@@ -252,11 +345,13 @@ $('#fallback').addEventListener('change', async e => {
   report = buildReport(await parseFiles(files));
   render();
   $('#reload').disabled = false;
+  $('#backup').disabled = !backupSet.length;
   $('#reload').textContent = '重新选择文件夹刷新';
 });
 
 $('#pick').addEventListener('click', pickDirectory);
 $('#reload').addEventListener('click', reload);
+$('#backup').addEventListener('click', backupNow);
 
 /* Drag a folder onto the page. */
 document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });

@@ -39,6 +39,7 @@ const ctx = vm.createContext({
   indexedDB: { open: () => ({ }) },
   navigator: { userAgent: 'node' },
   console,
+  Blob, TextEncoder, URL,
   Date, Math, JSON, Map, Set, Proxy, Intl, Object, Array,
   setTimeout, clearTimeout,
 });
@@ -104,6 +105,41 @@ for (const [tab, len] of Object.entries(sizes)) {
   if (!len) { console.error(`✗ 视图 ${tab} 渲染为空`); ok = false; }
 }
 console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).join('/')}) × 搜索/筛选组合渲染均无异常`);
+
+/* --- the backup zip must be a real, extractable archive -------------- */
+{
+  const entries = [];
+  for (const fn of fs.readdirSync(SAVE_DIR).sort()) {
+    if (!/\.(d2s|d2i)$/i.test(fn)) continue;
+    entries.push({ name: `备份/${fn}`, data: new Uint8Array(fs.readFileSync(path.join(SAVE_DIR, fn))) });
+  }
+  const blob = ctx.makeZip(entries, new Date());
+  const zipPath = path.join(HERE, '.backup-test.zip');
+  fs.writeFileSync(zipPath, Buffer.from(await blob.arrayBuffer()));
+  const { execFileSync } = await import('node:child_process');
+  try {
+    // Python's zipfile honours the UTF-8 name flag; macOS Info-ZIP does not,
+    // and these archives carry Chinese character names.
+    const py = `
+import hashlib, json, sys, zipfile
+z = zipfile.ZipFile(sys.argv[1])
+bad = z.testzip()
+print(json.dumps({"bad": bad,
+                  "files": {n: hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist()}}))
+`;
+    const out = JSON.parse(execFileSync('python3', ['-c', py, zipPath], { encoding: 'utf8' }));
+    if (out.bad) { console.error(`✗ 备份 zip CRC 校验失败: ${out.bad}`); ok = false; }
+    const { createHash } = await import('node:crypto');
+    for (const e of entries) {
+      const want = createHash('sha256').update(Buffer.from(e.data)).digest('hex');
+      if (out.files[e.name] !== want) { console.error(`✗ 备份内容不一致: ${e.name}`); ok = false; }
+    }
+    if (Object.keys(out.files).length !== entries.length) { console.error('✗ 备份文件数量不符'); ok = false; }
+    console.log(`✓ 备份 zip 校验通过：${entries.length} 个文件，CRC 与内容逐字节一致`);
+  } finally {
+    fs.rmSync(zipPath, { force: true });
+  }
+}
 
 const warned = report.sources.filter(x => x.error || x.warnings.length);
 if (warned.length) {

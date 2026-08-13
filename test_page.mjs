@@ -139,18 +139,19 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       out.plusOffAtMax = /data-plus="1"\\s+disabled/.test($('#view').innerHTML || '');
       // At the ceiling the plan still succeeds, so the limiting material is
       // marked "再合一个还差 N" — not red, which would read as "cannot make any".
-      out.tightAtMax = ($('#view').innerHTML || '').includes('再合一个还差');
+      out.tightAtMax = ($('#view').innerHTML || '').includes('再合一个还差')
+                       && /tile[^"]*tight/.test($('#view').innerHTML || '');
       // Incremental, not from scratch: one more Um is two more Pul, full stop.
       out.tightIsIncremental = ($('#view').innerHTML || '').includes('再多要补：符文：普尔 ×2');
-      out.noRedAtMax = !($('#view').innerHTML || '').includes('sshort');
+      out.noRedAtMax = !/tile[^"]*short/.test($('#view').innerHTML || '');
       out.okAtMax = ($('#view').innerHTML || '').includes('✅');
       state.target = 'r22'; state.qty = 1; renderView();
       const one = $('#view').innerHTML || '';
       out.plusOnBelowMax = /data-plus="1"\\s+title/.test(one);
       // One Um spends two of the six Pul: blue "−2" and a remaining count of 4.
-      out.spendShown = one.includes('−2</span><span class="scnt use">4</span>');
+      out.spendShown = one.includes('<i class="d dn">−2</i>') && /class="tcnt">4</.test(one);
       // ...and the rune being made counts up: 0 Um -> 1, in green.
-      out.gainShown = one.includes('+1</span><span class="scnt gain">1</span>');
+      out.gainShown = one.includes('<i class="d up">+1</i>') && /tile[^"]*gain/.test(one);
       out.gainInVerdict = one.includes('22 号 0 → 1');
       state.target = null; state.qty = 1;
       return out;

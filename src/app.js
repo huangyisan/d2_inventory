@@ -912,25 +912,24 @@ const GEM_QUALITY = ['碎裂', '瑕疵', '普通', '无瑕', '完美'];
  * material counts down in blue, material that runs out turns red.
  */
 /*
- * A row of the stock column, showing what this plan does to it: the target
+ * One tile of the stock grid, showing what this plan does to it: the target
  * counts up in green (+N, what you end up with), material spent counts down in
  * blue, material that runs out is flagged.
  */
 function matRow(code, use, short, tight, gain) {
   const n = ownedOf(code);
   const on = state.target === code;
-  const tag = short ? `<span class="sshort">差 ${short}</span>`
-            : tight ? `<span class="stight">再合一个还差 ${tight}</span>` : '';
-  let count;
-  if (gain) count = `<span class="sgain">+${gain}</span><span class="scnt gain">${n + gain}</span>`;
-  else if (use) count = `<span class="sused">−${use}</span><span class="scnt use">${n - use}</span>`;
-  else count = `<span class="scnt">${n || '—'}</span>`;
-  return `<button class="srow${n ? '' : ' zero'}${on ? ' on' : ''}${gain ? ' gain' : ''}${short ? ' short' : tight ? ' tight' : ''}"
-    data-add="${code}" title="${esc(matEn(code))} — 点一下算它的合成">
-    <span class="sno">${runeNo(code)}</span>
-    <span class="sname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
-    ${tag}
-    ${count}</button>`;
+  let delta = '', count = n || '—', cls = '';
+  if (gain) { delta = `<i class="d up">+${gain}</i>`; count = n + gain; cls = ' gain'; }
+  else if (use) { delta = `<i class="d dn">−${use}</i>`; count = n - use; cls = ' use'; }
+  if (short) cls += ' short';
+  else if (tight) cls += ' tight';
+  const why = short ? `　还差 ${short}` : tight ? `　再合一个还差 ${tight}` : use ? `　消耗 ${use}，剩 ${n - use}` : '';
+  return `<button class="tile${n ? '' : ' zero'}${on ? ' on' : ''}${cls}"
+    data-add="${code}" title="${runeNo(code)} 号 ${esc(matZh(code))} · ${esc(matEn(code))}${why} — 点一下算它的合成">
+    <span class="tno">${runeNo(code)}</span>${delta}
+    <span class="tname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
+    <span class="tcnt">${count}</span></button>`;
 }
 
 function gemCell(code, use, short, tight) {
@@ -974,7 +973,7 @@ function viewCube() {
   const socketedTotal = Object.values(report.socketed).reduce((a, b) => a + b, 0);
   const stock = `<div class="stock">
     <div class="stitle">仓库符文 <span class="thin">${s.runeCount} 个 · ${s.runeKinds} 种</span></div>
-    <div class="srows">${RUNES.map(c =>
+    <div class="tiles">${RUNES.map(c =>
       matRow(c, consumed[c] || 0, shortOf(c), tightOf(c), c === code && tree && tree.ok ? want : 0)).join('')}</div>
     <div class="stitle">仓库宝石 <span class="thin">${s.gemCount} 颗</span></div>
     <table class="gemtab">

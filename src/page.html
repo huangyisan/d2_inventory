@@ -164,38 +164,39 @@
   .tooltip .ttier.on .tprop { color: var(--green); }
   .tooltip .ttier.on .tlabel { color: var(--green); }
   /* Cube planner: stock on the left, the list and the answer on the right */
-  .cube { display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: start; }
+  .cube { display: grid; grid-template-columns: 286px 1fr; gap: 22px; align-items: start; }
   @media (max-width: 860px) { .cube { grid-template-columns: 1fr; } }
   .cubeleft { position: sticky; top: 58px; max-height: calc(100vh - 80px); overflow-y: auto;
               padding-right: 4px; }
   @media (max-width: 860px) { .cubeleft { position: static; max-height: none; } }
   .stitle { font-size: 13px; font-weight: 600; margin: 4px 0 6px; }
   .stitle .thin { font-weight: 400; color: var(--muted); font-size: 12px; }
-  .srows { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
-  .srow { display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
-          font: inherit; font-size: 13px; padding: 3px 8px; cursor: pointer;
+  /* Five across, wrapping down: the whole ladder fits without scrolling. */
+  .tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 16px; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center;
+          gap: 0; padding: 4px 2px 3px; font: inherit; cursor: pointer; overflow: hidden;
           background: var(--panel); color: var(--ink);
-          border: 1px solid var(--line); border-radius: 6px; }
-  .srow:hover { border-color: var(--gold); }
-  .srow.zero { color: var(--dim); background: transparent; }
-  .srow.on { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
-  .srow .sno { color: var(--muted); font-size: 11px; min-width: 16px; text-align: right; flex: none; }
-  .srow.on .sno { color: var(--gold); }
-  .srow .sname { flex: 1; }
-  .srow .swant { color: var(--gold); font-size: 11.5px; font-weight: 600; }
-  .srow .scnt { font-weight: 600; font-size: 12.5px; flex: none; }
-  /* Spent material counts down in blue; material that runs out flashes red. */
-  .srow .scnt.use { color: var(--use); }
-  .srow .scnt.gain { color: var(--green); }
-  .srow .sgain { color: var(--green); font-size: 11px; font-weight: 600; }
-  .srow.gain { border-color: var(--green); background: var(--green-bg); }
-  .srow .sused { color: var(--use); font-size: 11px; }
-  .srow .sshort { color: var(--bad); font-size: 11px; font-weight: 600; }
-  .srow .stight { color: var(--dupe); font-size: 10.5px; }
-  .srow.tight { border-color: var(--dupe); }
-  .srow.short { border-color: var(--bad); background: var(--bad-bg); animation: flash .5s ease-out 2; }
+          border: 1px solid var(--line); border-radius: 7px; }
+  .tile:hover { border-color: var(--gold); }
+  .tile.zero { color: var(--dim); background: transparent; }
+  .tile.on { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
+  .tile .tno { font-size: 9.5px; line-height: 1.2; color: var(--muted); }
+  .tile.on .tno { color: var(--gold); }
+  .tile .tname { font-size: 11px; line-height: 1.35; white-space: nowrap; }
+  .tile .tcnt { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+  /* Spent material counts down in blue, the rune being made counts up in green. */
+  .tile .d { position: absolute; top: 1px; right: 3px; font-style: normal; font-size: 9px; font-weight: 600; }
+  .tile .d.dn { color: var(--use); }
+  .tile .d.up { color: var(--green); }
+  .tile.use { border-color: var(--use); }
+  .tile.use .tcnt { color: var(--use); }
+  .tile.gain { border-color: var(--green); background: var(--green-bg); }
+  .tile.gain .tcnt { color: var(--green); }
+  .tile.tight { border-color: var(--dupe); }
+  .tile.short { border-color: var(--bad); background: var(--bad-bg); color: var(--bad);
+                animation: flash .5s ease-out 2; }
   @keyframes flash { 0%, 100% { background: var(--bad-bg); } 50% { background: transparent; } }
-  @media (prefers-reduced-motion: reduce) { .srow.short { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .tile.short { animation: none; } }
   .gemtab { width: 100%; border-collapse: collapse; font-size: 12px; }
   .gemtab th { color: var(--muted); font-weight: 500; font-size: 11px; padding: 2px 3px; text-align: center; }
   .gemtab tbody th { text-align: left; color: var(--ink); }

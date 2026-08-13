@@ -160,23 +160,32 @@
   .tooltip .ttier .tprop { color: var(--dim); }
   .tooltip .ttier.on .tprop { color: var(--green); }
   .tooltip .ttier.on .tlabel { color: var(--green); }
-  /* Cube planner */
-  .matgrid { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 18px; }
-  .mat { display: flex; flex-direction: column; align-items: center; gap: 1px;
-         min-width: 74px; padding: 6px 8px; cursor: default; font: inherit;
-         background: var(--panel); color: var(--ink);
-         border: 1px solid var(--line); border-radius: 8px; }
-  button.mat[data-cube] { cursor: pointer; }
-  button.mat[data-cube]:hover { border-color: var(--gold); }
-  .mat.zero { color: var(--dim); background: transparent; }
-  .mat.on { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
-  .mat .no { font-size: 10px; color: var(--muted); }
-  .mat.on .no { color: var(--gold); }
-  .mat .mn { font-size: 12.5px; white-space: nowrap; }
-  .mat .mc { font-size: 13px; font-weight: 600; }
-  .gemrow { display: flex; align-items: flex-start; gap: 10px; }
-  .gemrow .gl { color: var(--muted); font-size: 12px; padding-top: 12px; flex: none; width: 18px; }
-  .gemrow .matgrid { margin: 6px 0; }
+  /* Cube planner: stock on the left, the list and the answer on the right */
+  .cube { display: grid; grid-template-columns: 250px 1fr; gap: 22px; align-items: start; }
+  @media (max-width: 860px) { .cube { grid-template-columns: 1fr; } }
+  .cubeleft { position: sticky; top: 58px; max-height: calc(100vh - 80px); overflow-y: auto;
+              padding-right: 4px; }
+  @media (max-width: 860px) { .cubeleft { position: static; max-height: none; } }
+  .stitle { font-size: 13px; font-weight: 600; margin: 4px 0 6px; }
+  .stitle .thin { font-weight: 400; color: var(--muted); font-size: 12px; }
+  .srows { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+  .srow { display: flex; align-items: baseline; gap: 7px; width: 100%; text-align: left;
+          font: inherit; font-size: 13px; padding: 3px 8px; cursor: pointer;
+          background: var(--panel); color: var(--ink);
+          border: 1px solid var(--line); border-radius: 6px; }
+  .srow:hover { border-color: var(--gold); }
+  .srow.zero { color: var(--dim); background: transparent; }
+  .srow.on { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); }
+  .srow .sno { color: var(--muted); font-size: 11px; min-width: 16px; text-align: right; flex: none; }
+  .srow.on .sno { color: var(--gold); }
+  .srow .sname { flex: 1; }
+  .srow .swant { color: var(--gold); font-size: 11.5px; font-weight: 600; }
+  .srow .scnt { font-weight: 600; font-size: 12.5px; flex: none; }
+  .gemtab { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .gemtab th { color: var(--muted); font-weight: 500; font-size: 11px; padding: 2px 3px; text-align: center; }
+  .gemtab tbody th { text-align: left; color: var(--ink); }
+  .gemtab td { text-align: center; padding: 2px 3px; border-bottom: 1px solid var(--line); }
+  .gemtab td.zero { color: var(--dim); }
   .verdict { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px;
              font-size: 16px; font-weight: 600; margin: 4px 0 12px; }
   .verdict.good { border-color: var(--green); background: var(--green-bg); color: var(--green); }
@@ -192,7 +201,6 @@
               cursor: pointer; text-decoration: underline dotted var(--dim); text-underline-offset: 3px; }
   .plan .lk:hover { color: var(--gold); text-decoration-color: var(--gold); }
   .pnode.bad > .prow { color: var(--dupe); }
-  .mat .wq { color: var(--gold); font-weight: 600; }
   .basket { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 14px; }
   .bitem { display: inline-flex; align-items: center; gap: 6px; padding: 5px 8px;
            background: var(--gold-bg); border: 1px solid var(--gold); border-radius: 8px; font-size: 13.5px; }
@@ -203,6 +211,7 @@
   .bq.del { color: var(--muted); }
   .bitem .bn { min-width: 16px; text-align: center; font-weight: 600; }
   h3.psub { font-size: 15px; margin: 20px 0 6px; }
+  h3.psub .thin { color: var(--muted); font-weight: 400; font-size: 12.5px; }
   h3.psub .cap { color: var(--dupe); font-size: 12.5px; font-weight: 400; margin-left: 6px; }
   h3.psub .thin { color: var(--muted); font-weight: 400; font-size: 12.5px; }
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
@@ -212,7 +221,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="ver" title="构建于 2026-08-13 21:37">6d5d7b0+</span>
+    <span class="ver" title="构建于 2026-08-13 21:56">570c942+</span>
     <h1>暗黑破坏神2 · 收藏台账</h1>
     <div class="status" id="status">选择你的存档文件夹开始。</div>
     <div class="actions">
@@ -1677,17 +1686,6 @@ function ownedOf(code) {
   return (report.materials[code] || []).reduce((n, c) => n + (c.n || 1), 0);
 }
 
-function matCell(code, selectable) {
-  const n = ownedOf(code);
-  const no = runeNo(code);
-  const want = state.want[code] || 0;
-  return `<button class="mat${n ? '' : ' zero'}${want ? ' on' : ''}"${selectable ? ` data-add="${code}"` : ''}
-    title="${esc(matEn(code))}${selectable ? ' — 点一下加入合成清单' : ''}">
-    ${no ? `<span class="no">${no}</span>` : ''}
-    <span class="mn">${esc(matZh(code).replace(/^符文：/, ''))}</span>
-    <span class="mc">${n || '—'}${want ? ` <span class="wq">要${want}</span>` : ''}</span></button>`;
-}
-
 /*
  * A working branch is unrolled in full. A broken one is shown one level deep —
  * just far enough to see which step fails — and you drill in by adding that
@@ -1716,6 +1714,20 @@ const matList = obj => Object.entries(obj)
   .sort((a, b) => MATERIALS_ORDER.indexOf(b[0]) - MATERIALS_ORDER.indexOf(a[0]))
   .map(([c, n]) => `${esc(matZh(c))} ×${n}`).join('、');
 
+const GEM_QUALITY = ['碎裂', '瑕疵', '普通', '无瑕', '完美'];
+
+// One row of the stock column: number, name, how many you have.
+function matRow(code, clickable) {
+  const n = ownedOf(code);
+  const want = state.want[code] || 0;
+  return `<button class="srow${n ? '' : ' zero'}${want ? ' on' : ''}"${clickable ? ` data-add="${code}"` : ''}
+    title="${esc(matEn(code))}${clickable ? ' — 点一下加入合成清单' : ''}">
+    <span class="sno">${runeNo(code)}</span>
+    <span class="sname">${esc(matZh(code).replace(/^符文：/, ''))}</span>
+    ${want ? `<span class="swant">要${want}</span>` : ''}
+    <span class="scnt">${n || '—'}</span></button>`;
+}
+
 function viewCube() {
   const s = report.summary;
   // Everything you own is the starting material; the list is what you want out.
@@ -1726,62 +1738,71 @@ function viewCube() {
   const wanted = Object.entries(state.want).filter(([, n]) => n > 0)
     .sort((a, b) => RUNES.indexOf(b[0]) - RUNES.indexOf(a[0]));
 
-  const grid = `<div class="matgrid">${RUNES.map(c => matCell(c, true)).join('')}</div>`;
-  const gems = `<h2 class="section">宝石库存 <span class="thin">— 合成时按需消耗</span></h2>
-    ${Object.entries(GEMS).map(([label, codes]) =>
-      `<div class="gemrow"><span class="gl">${label}</span>
-        <div class="matgrid">${codes.map(c => matCell(c, false)).join('')}</div></div>`).join('')}
-    ${Object.keys(report.socketed).length
-      ? `<div class="hint">另有 ${Object.values(report.socketed).reduce((a, b) => a + b, 0)} 个符文/宝石已经镶在装备里，拿不出来，不计入可用材料。</div>` : ''}`;
+  /* ---- left column: what you own ---- */
+  const socketedTotal = Object.values(report.socketed).reduce((a, b) => a + b, 0);
+  const stock = `<div class="stock">
+    <div class="stitle">仓库符文 <span class="thin">${s.runeCount} 个 · ${s.runeKinds} 种</span></div>
+    <div class="srows">${RUNES.map(c => matRow(c, true)).join('')}</div>
+    <div class="stitle">仓库宝石 <span class="thin">${s.gemCount} 颗</span></div>
+    <table class="gemtab">
+      <thead><tr><th></th>${GEM_QUALITY.map(q => `<th>${q}</th>`).join('')}</tr></thead>
+      <tbody>${Object.entries(GEMS).map(([label, codes]) => `<tr><th>${label}</th>${
+        codes.map((c, i) => `<td class="${ownedOf(c) ? '' : 'zero'}" title="${esc(matZh(c))}">${ownedOf(c) || '—'}</td>`).join('')
+      }</tr>`).join('')}</tbody>
+    </table>
+    ${socketedTotal ? `<div class="hint">另有 ${socketedTotal} 个已镶在装备里，拿不出来，不计入材料。</div>` : ''}
+  </div>`;
 
-  const head = `<h2 class="section">点符文加进合成清单
-      <span class="thin">— 仓库里共有 ${s.runeCount} 个符文（${s.runeKinds} 种）、${s.gemCount} 颗宝石，作为起始材料</span></h2>${grid}`;
-
+  /* ---- right column: the list and the answer ---- */
+  let right;
   if (!wanted.length) {
-    return `${head}<div class="empty">点上面任意一个符文，把它加进「我要合成」清单，可以点多次加数量。</div>${gems}`;
+    right = `<div class="empty">点左边任意一个符文，把它加进「我要合成」清单。<br>
+      再点一次加数量，可以同时排好几个目标。</div>`;
+  } else {
+    const basket = `<div class="basket">${wanted.map(([c, n]) => `
+      <span class="bitem">
+        <b>${runeNo(c)} 号 ${esc(matZh(c).replace(/^符文：/, ''))}</b>
+        <button class="bq" data-sub="${c}" title="少一个">−</button>
+        <span class="bn">${n}</span>
+        <button class="bq" data-add="${c}" title="多一个">+</button>
+        <button class="bq del" data-del="${c}" title="从清单里去掉">×</button>
+      </span>`).join('')}
+      <button class="chip" data-clear="1">清空清单</button></div>`;
+
+    // One shared pool across all targets, so two Lo really do cost four Ohm.
+    // Snapshot the pool before each target so a failure can say how far it got.
+    const trees = wanted.map(([code, n]) => {
+      const before = { ...pool };
+      const tree = plan(code, n, pool, false);
+      return { code, n, tree, max: tree.ok ? n : maxMakeable(code, before) };
+    });
+    const consumed = {}, missing = {};
+    trees.forEach(t => planTotals(t.tree, consumed, missing));
+    const ok = trees.every(t => t.tree.ok);
+
+    const detail = trees.map(({ code, n, tree, max }) => `
+      <h3 class="psub">${n} × ${runeNo(code)} 号 ${esc(matZh(code))}
+        <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span>
+        ${tree.ok ? '' : `<span class="cap">这些材料最多凑出 ${max} 个</span>`}</h3>
+      ${ownedOf(code) ? `<div class="hint">${copiesHtml(report.materials[code])}</div>` : ''}
+      <div class="plan">${planTree(tree)}</div>`).join('');
+
+    right = `${basket}
+      <div class="verdict ${ok ? 'good' : 'bad'}">
+        ${ok ? '✅ 材料够，可以合成' : '❌ 材料不够'}
+        <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
+        ${ok ? '' : `<div class="sub">${trees.filter(t => !t.tree.ok)
+          .map(t => `${runeNo(t.code)} 号 ${esc(matZh(t.code).replace(/^符文：/, ''))}：要 ${t.n} 个，这些材料最多凑出 ${t.max} 个`)
+          .join('；')}</div>`}
+        ${ok ? '' : '<div class="sub">（树里点符文名可以把它也加进清单，接着往下追）</div>'}
+      </div>
+      ${detail}`;
   }
 
-  const basket = `<div class="basket">${wanted.map(([c, n]) => `
-    <span class="bitem">
-      <b>${runeNo(c)} 号 ${esc(matZh(c).replace(/^符文：/, ''))}</b>
-      <button class="bq" data-sub="${c}" title="少一个">−</button>
-      <span class="bn">${n}</span>
-      <button class="bq" data-add="${c}" title="多一个">+</button>
-      <button class="bq del" data-del="${c}" title="从清单里去掉">×</button>
-    </span>`).join('')}
-    <button class="chip" data-clear="1">清空清单</button></div>`;
-
-  // One shared pool across all targets, so two Lo really do cost four Ohm.
-  // Snapshot the pool before each target so a failure can say how far it got.
-  const trees = wanted.map(([code, n]) => {
-    const before = { ...pool };
-    const tree = plan(code, n, pool, false);
-    return { code, n, tree, max: tree.ok ? n : maxMakeable(code, before) };
-  });
-  const consumed = {}, missing = {};
-  trees.forEach(t => planTotals(t.tree, consumed, missing));
-  const ok = trees.every(t => t.tree.ok);
-
-  const detail = trees.map(({ code, n, tree, max }) => `
-    <h3 class="psub">${n} × ${runeNo(code)} 号 ${esc(matZh(code))}
-      <span class="thin">— ${esc(matEn(code))}${ownedOf(code) ? ` · 仓库里已有 ${ownedOf(code)} 个` : ''}</span>
-      ${tree.ok ? '' : `<span class="cap">这些材料最多凑出 ${max} 个</span>`}</h3>
-    ${ownedOf(code) ? `<div class="hint">${copiesHtml(report.materials[code])}</div>` : ''}
-    <div class="plan">${planTree(tree)}</div>`).join('');
-
-  return `${head}
-    <h2 class="section">我要合成</h2>
-    ${basket}
-    <div class="verdict ${ok ? 'good' : 'bad'}">
-      ${ok ? '✅ 材料够，可以合成' : '❌ 材料不够'}
-      <div class="sub">${ok ? `将消耗：${matList(consumed)}` : `还差：${matList(missing)}`}</div>
-      ${ok ? '' : `<div class="sub">${trees.filter(t => !t.tree.ok)
-        .map(t => `${runeNo(t.code)} 号 ${esc(matZh(t.code).replace(/^符文：/, ''))}：要 ${t.n} 个，这些材料最多凑出 ${t.max} 个`)
-        .join('；')}</div>`}
-      ${ok ? '' : '<div class="sub">（树里点符文名可以把它也加进清单，接着往下追）</div>'}
-    </div>
-    ${detail}
-    ${gems}`;
+  return `<div class="cube">
+    <div class="cubeleft">${stock}</div>
+    <div class="cuberight"><h2 class="section">我要合成</h2>${right}</div>
+  </div>`;
 }
 
 // Cheapest first, so the consumed/missing lists read high-value material last.

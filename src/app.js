@@ -325,9 +325,45 @@ function tipFor(entry, extraTitle) {
   return ` data-tip="${id}"`;
 }
 
+function tipForSet(group) {
+  if (!(group.partial || []).length && !(group.full || []).length) return '';
+  const id = 't' + (++tipSeq);
+  TIPS.set(id, { set: group });
+  return ` data-tip="${id}"`;
+}
+
+/*
+ * Whole-set tooltip: the per-piece-count bonuses and the full-set bonuses,
+ * with the tiers you have already reached marked as active.
+ */
+function renderSetTip(g) {
+  const line = s => `<div class="tprop">${esc(s)}</div>`;
+  const tiers = (g.partial || []).map(p => {
+    const on = g.ownedCount >= p.pieces;
+    return `<div class="ttier ${on ? 'on' : ''}">
+        <div class="tlabel">凑齐 ${p.pieces} 件${on ? ' · 已达成' : ''}</div>
+        ${p.props.map(line).join('')}
+      </div>`;
+  }).join('');
+  const fullOn = g.complete;
+  const full = (g.full || []).length ? `
+    <div class="ttier ${fullOn ? 'on' : ''}">
+      <div class="tlabel">全套 ${g.total} 件${fullOn ? ' · 已达成' : ''}</div>
+      ${g.full.map(line).join('')}
+    </div>` : '';
+  return `
+    <div class="thead">
+      <div class="tname s">${esc(g.zh)}</div>
+      <div class="tbase">${esc(g.name)} · 已有 ${g.ownedCount}/${g.total} 件</div>
+    </div>
+    <div class="tbody">${tiers}${full}</div>
+    <div class="tfoot">套装加成，绿色为当前收藏已达成的档位</div>`;
+}
+
 function renderTip(id) {
   const rec = TIPS.get(id);
   if (!rec) return '';
+  if (rec.set) return renderSetTip(rec.set);
   const e = rec.entry;
   const line = s => `<div class="tprop">${esc(s)}</div>`;
   return `
@@ -475,7 +511,7 @@ function viewSets() {
 
   return head + `<div class="setgrid">` + groups.map(g => `
     <div class="setcard ${g.complete ? 'done' : ''}">
-      <h3><span>${esc(g.zh)}</span>
+      <h3><span${tipForSet(g)}>${esc(g.zh)}</span>
         <span class="cnt ${g.complete ? 'ok' : ''}">${g.ownedCount}/${g.total}${g.complete ? ' ✓' : ''}</span></h3>
       <div class="en">${esc(g.name)}</div>
       <ul class="pieces">${g.pieces.map(p => `

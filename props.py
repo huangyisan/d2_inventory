@@ -290,6 +290,8 @@ class PropRenderer:
         """Render one property row; returns a string or None to skip it."""
         if not code or code.startswith("*"):
             return None
+        if code == "state":
+            return None  # cosmetic full-set visual effect, nothing to show
 
         if code in PLAIN:
             return PLAIN[code].replace("{v}", self._val(lo, hi))
@@ -362,6 +364,38 @@ class PropRenderer:
 
         self.unmapped.add(code)
         return None
+
+    def render_set_bonuses(self, row):
+        """
+        Whole-set bonuses from sets.txt:
+          PCode<N>a/b  — partial bonus, active once N pieces are worn
+          FCode<N>     — full-set bonus
+        """
+        partial = []
+        for pieces in range(2, 6):
+            lines = []
+            for suffix in ("a", "b"):
+                code = row.get(f"PCode{pieces}{suffix}")
+                if not code:
+                    continue
+                text = self._fix_sign(self.render_one(
+                    code, row.get(f"PParam{pieces}{suffix}"),
+                    row.get(f"PMin{pieces}{suffix}"), row.get(f"PMax{pieces}{suffix}")))
+                if text and text not in lines:
+                    lines.append(text)
+            if lines:
+                partial.append({"pieces": pieces, "props": lines})
+
+        full = []
+        for i in range(1, 9):
+            code = row.get(f"FCode{i}")
+            if not code:
+                continue
+            text = self._fix_sign(self.render_one(
+                code, row.get(f"FParam{i}"), row.get(f"FMin{i}"), row.get(f"FMax{i}")))
+            if text and text not in full:
+                full.append(text)
+        return partial, full
 
     def render_rows(self, row, count, prefix="prop", par="par", lo="min", hi="max"):
         out = []

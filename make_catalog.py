@@ -191,11 +191,17 @@ def main():
     for sid, info in sorted(gd.setitem_by_id.items()):
         if not info["code"]:
             continue
-        group = sets.setdefault(info["set"], {
-            "name": info["set"],
-            "zh": strings.get(info["set"], info["set"]),
-            "pieces": [],
-        })
+        if info["set"] not in sets:
+            set_row = gd.sets.get(info["set"], {})
+            partial, full = props.render_set_bonuses(set_row)
+            sets[info["set"]] = {
+                "name": info["set"],
+                "zh": strings.get(info["set"], info["set"]),
+                "pieces": [],
+                "partial": partial,   # bonuses per piece count
+                "full": full,         # full-set bonuses
+            }
+        group = sets[info["set"]]
         group["pieces"].append({
             "name": info["name"],
             "zh": strings.get(info["name"], info["name"]),

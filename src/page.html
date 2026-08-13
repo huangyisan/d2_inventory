@@ -149,6 +149,11 @@
   .tooltip .tlabel { color: var(--muted); font-size: 11.5px; margin-bottom: 2px; }
   .tooltip .tfoot { color: var(--muted); font-size: 11px; margin-top: 8px;
                     border-top: 1px dashed var(--line); padding-top: 6px; }
+  .tooltip .ttier { margin-bottom: 8px; }
+  .tooltip .ttier:last-child { margin-bottom: 0; }
+  .tooltip .ttier .tprop { color: var(--dim); }
+  .tooltip .ttier.on .tprop { color: var(--green); }
+  .tooltip .ttier.on .tlabel { color: var(--green); }
   footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
   [hidden] { display: none !important; }
 </style>

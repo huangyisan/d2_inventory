@@ -15,7 +15,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "src")
 DATA_DIR = os.path.join(HERE, "data")
-OUTPUT = os.path.join(HERE, "暗黑2收藏台账.html")
+OUTPUT = os.path.join(HERE, "暗黑2存档管家.html")
 DIST = os.path.join(HERE, "dist")  # deploy root (Cloudflare Pages)
 
 

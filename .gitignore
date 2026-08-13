@@ -12,7 +12,7 @@ data/*
 !data/catalog.json
 
 # 本地便捷副本，内容与 dist/index.html 完全相同（避免每次重建双份写入历史）
-暗黑2收藏台账.html
+暗黑2存档管家.html
 
 node_modules/
 __pycache__/

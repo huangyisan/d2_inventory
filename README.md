@@ -1,13 +1,13 @@
-# 暗黑破坏神2 收藏台账
+# 暗黑破坏神2 存档管家
 
-扫描 D2R 存档，列出你拥有的暗金装备与绿色套装、分别放在哪个小号上、还差哪些没收集，
-以及哪些是可以清掉的重复件。
+扫描 D2R 存档，做两件事：**装备收藏**（拥有哪些暗金与绿色套装、分别放在哪个小号上、
+还差哪些、哪些是可以清掉的重复件）和**符文合成**（手上的符文宝石够不够合出想要的符文）。
 
 **存档只读打开，绝不修改、绝不上传。**
 
 ## 用法
 
-双击 `暗黑2收藏台账.html`（推荐 Chrome / Edge），点「选择存档文件夹」，选中：
+双击 `暗黑2存档管家.html`（推荐 Chrome / Edge），点「选择存档文件夹」，选中：
 
 - macOS：`~/Library/Application Support/Blizzard/Diablo II Resurrected/`
 - Windows：`%USERPROFILE%\Saved Games\Diablo II Resurrected\`
@@ -85,7 +85,7 @@ python3 fetch_names.py     # 下载 D2R 官方多语言字符串表
 python3 fetch_t2s.py       # 下载 OpenCC 繁转简对照表
 python3 fetch_props.py     # 下载属性/技能表
 python3 make_catalog.py    # 生成内嵌用的精简目录 data/catalog.json
-python3 make_page.py       # 打包成单文件 暗黑2收藏台账.html
+python3 make_page.py       # 打包成单文件 暗黑2存档管家.html
 ```
 
 校验（浏览器解析器 vs Python 参考实现，必须逐字段一致）：

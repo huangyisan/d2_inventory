@@ -44,8 +44,6 @@ PLAIN = {
     "dur": "+{v} 耐久度",
     "indestruct": "无法破坏",
     "ethereal": "虚空(无法修理)",
-    "rep-dur": "每 {v} 秒修复 1 点耐久",
-    "rep-quant": "每 {v} 秒补充 1 个",
     "stack": "+{v} 最大堆叠数",
 
     # offence
@@ -148,7 +146,6 @@ PLAIN = {
     "ease": "需求 -{v}%",
     "cheap": "购买花费减少 {v}%",
     "addxp": "+{v}% 经验值获得",
-    "sock": "镶孔数 {v}",
     "magicarrow": "+{v} 魔法箭等级",
     "explosivearrow": "+{v} 爆炸箭等级",
 
@@ -279,6 +276,16 @@ class PropRenderer:
         hi = lo if hi is None else hi
         return f"{lo}" if lo == hi else f"{lo}~{hi}"
 
+    @staticmethod
+    def _fix_sign(text):
+        """
+        Collapse a sign that the template supplied against a value that already
+        carries its own: "+-30%" -> "-30%", "需求 --40%" -> "需求 -40%".
+        """
+        if not text:
+            return text
+        return text.replace("+-", "-").replace("--", "-")
+
     def render_one(self, code, param, lo, hi):
         """Render one property row; returns a string or None to skip it."""
         if not code or code.startswith("*"):
@@ -297,8 +304,12 @@ class PropRenderer:
             return text
 
         if code in PER_LEVEL:
-            # stored in 1/8 units per character level
-            per = (param or 0) / 8
+            # Stored in 1/8 units per character level, in the param on most
+            # rows but in the min/max range on some.
+            raw = param if param else lo
+            if not raw:
+                return None
+            per = raw / 8
             per = int(per) if per == int(per) else round(per, 2)
             return f"每角色等级 +{per} {PER_LEVEL[code]}"
 
@@ -309,7 +320,8 @@ class PropRenderer:
         if code in ELEM_SKILL:
             return f"+{self._val(lo, hi)} {ELEM_SKILL[code]}技能等级"
         if code == "randclassskill":
-            return f"+{self._val(lo, hi)} 随机职业技能等级"
+            # min/max here are not a level range, so no number is claimed.
+            return "提升随机职业的技能等级"
         if code == "skilltab-war":
             return f"+{self._val(lo, hi)} 【野蛮人 · 战吼】技能等级"
         if code == "magdam-rand":
@@ -323,12 +335,28 @@ class PropRenderer:
             return f"+{self._val(lo, hi)} 随机技能等级"
         if code == "aura":
             return f"施放 等级 {self._val(lo, hi)} 的 {self.skill_name(param)} 光环"
+        if code == "sock":
+            # Socket count sits in the param on fixed-socket items and in the
+            # min/max range on the ones that roll.
+            if param:
+                return f"镶孔数 {param}"
+            return f"镶孔数 {self._val(lo, hi)}" if lo else None
+        if code in ("rep-dur", "rep-quant"):
+            # param is a rate; the game shows 100/param seconds per point.
+            if not param:
+                return None
+            what = "修复 1 点耐久" if code == "rep-dur" else "补充 1 个"
+            return f"每 {int(100 / param)} 秒{what}"
         if code == "charged":
-            # min = charges, max = skill level
-            return f"等级 {hi if hi is not None else lo} 的 {self.skill_name(param)}（{lo} 次充能）"
+            # The two numbers are charge count and skill level, but their order
+            # is not consistent across the table, so only the skill is shown.
+            return f"可施放 {self.skill_name(param)}（充能）"
         if code.lower() in ON_EVENT:
             when = ON_EVENT[code.lower()]
-            return f"{lo}% 几率{when}施放 等级 {hi} 的 {self.skill_name(param)}"
+            skill = self.skill_name(param)
+            # Some rows carry no skill level; say nothing rather than "等级 0".
+            level = f"等级 {hi} 的 " if hi else ""
+            return f"{lo}% 几率{when}施放 {level}{skill}"
         if code == "reanimate":
             return f"{self._val(lo, hi)}% 几率复活敌人为随从"
 
@@ -341,8 +369,8 @@ class PropRenderer:
             code = row.get(f"{prefix}{i}")
             if not code:
                 continue
-            text = self.render_one(code, row.get(f"{par}{i}"),
-                                   row.get(f"{lo}{i}"), row.get(f"{hi}{i}"))
+            text = self._fix_sign(self.render_one(code, row.get(f"{par}{i}"),
+                                                  row.get(f"{lo}{i}"), row.get(f"{hi}{i}")))
             if text and text not in out:
                 out.append(text)
         return out

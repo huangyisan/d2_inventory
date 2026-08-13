@@ -508,11 +508,11 @@ const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost
 const TABS = () => (state.mode === 'runes' ? []
   : GEAR_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle));
 
+// Search matches the item's own name only — not its base type, not the part it
+// goes in, not which mule happens to hold it.
 function hit(entry, q) {
   if (!q) return true;
-  return [entry.zh, entry.name, entry.base, entry.base_zh, entry.slot,
-    ...(entry.copies || []).map(c => c.source + ' ' + c.where)]
-    .join(' ').toLowerCase().includes(q);
+  return [entry.zh, entry.name].join(' ').toLowerCase().includes(q);
 }
 
 /*

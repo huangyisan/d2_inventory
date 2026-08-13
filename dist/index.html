@@ -260,7 +260,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="ver" title="构建于 2026-08-13 22:34">3a94923+</span>
+    <span class="ver" title="构建于 2026-08-13 22:35">b6ae355+</span>
     <h1>暗黑破坏神2 · 收藏台账</h1>
     <div class="status" id="status">选择你的存档文件夹开始。</div>
     <div class="actions">
@@ -296,7 +296,7 @@
     <div id="warnings"></div>
     <div class="toolbar" id="toolbar">
       <div class="tabs" id="tabs"></div>
-      <input type="search" id="q" placeholder="搜索物品 / 套装 / 小号名…（中英文皆可）">
+      <input type="search" id="q" placeholder="按物品名搜索…（中英文皆可）">
     </div>
     <div class="filters" id="filters"></div>
     <div id="view"></div>
@@ -1358,11 +1358,11 @@ const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost
 const TABS = () => (state.mode === 'runes' ? []
   : GEAR_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle));
 
+// Search matches the item's own name only — not its base type, not the part it
+// goes in, not which mule happens to hold it.
 function hit(entry, q) {
   if (!q) return true;
-  return [entry.zh, entry.name, entry.base, entry.base_zh, entry.slot,
-    ...(entry.copies || []).map(c => c.source + ' ' + c.where)]
-    .join(' ').toLowerCase().includes(q);
+  return [entry.zh, entry.name].join(' ').toLowerCase().includes(q);
 }
 
 /*

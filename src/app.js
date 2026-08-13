@@ -76,8 +76,10 @@ const matEn = code => (CATALOG.bases[code] ? CATALOG.bases[code][0] : code);
  * is already owned first and cubing the rest. `pool` is mutated, so the same
  * gem is never counted twice across two branches of the tree.
  */
-function plan(code, qty, pool) {
-  const have = Math.min(pool[code] || 0, qty);
+function plan(code, qty, pool, useStock = true) {
+  // The thing you asked to *make* is never satisfied out of stock: clicking
+  // "24 号" means cube one, not hand me the one already in the stash.
+  const have = useStock ? Math.min(pool[code] || 0, qty) : 0;
   pool[code] = (pool[code] || 0) - have;
   const node = { code, qty, have, children: [], missing: 0 };
   const short = qty - have;
@@ -116,13 +118,14 @@ function planTotals(node, consumed = {}, missing = {}) {
  * feasible range is exact under the same greedy rules.
  */
 function maxMakeable(code, pool, cap = 512) {
-  if (!plan(code, 1, { ...pool }).ok) return 0;
+  const can = q => plan(code, q, { ...pool }, false).ok;
+  if (!can(1)) return 0;
   let lo = 1, hi = 2;
-  while (hi <= cap && plan(code, hi, { ...pool }).ok) { lo = hi; hi *= 2; }
+  while (hi <= cap && can(hi)) { lo = hi; hi *= 2; }
   hi = Math.min(hi, cap);
   while (lo + 1 < hi) {
     const mid = (lo + hi) >> 1;
-    if (plan(code, mid, { ...pool }).ok) lo = mid; else hi = mid;
+    if (can(mid)) lo = mid; else hi = mid;
   }
   return lo;
 }
@@ -891,7 +894,7 @@ function matCell(code, selectable) {
  */
 function planTree(node, canExpandBroken = true) {
   const bits = [];
-  if (node.have) bits.push(`<span class="ok">现有 ${node.have}</span>`);
+  if (node.have) bits.push(`<span class="ok">用现有 ${node.have}</span>`);
   if (node.ok) {
     const made = node.qty - node.have;
     if (made) bits.push(`<span class="mk">合成 ${made}</span>`);
@@ -951,7 +954,7 @@ function viewCube() {
   // Snapshot the pool before each target so a failure can say how far it got.
   const trees = wanted.map(([code, n]) => {
     const before = { ...pool };
-    const tree = plan(code, n, pool);
+    const tree = plan(code, n, pool, false);
     return { code, n, tree, max: tree.ok ? n : maxMakeable(code, before) };
   });
   const consumed = {}, missing = {};

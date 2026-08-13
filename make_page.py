@@ -45,12 +45,16 @@ def version():
             stderr=subprocess.DEVNULL).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return "unknown"
+    # The bundle itself is a build artefact; rebuilding must not make the tree
+    # look dirty, only real source edits count.
+    generated = {"dist/index.html", "dist/_headers", os.path.basename(OUTPUT)}
     try:
-        dirty = subprocess.check_output(
+        lines = subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=HERE, text=True,
-            stderr=subprocess.DEVNULL).strip()
+            stderr=subprocess.DEVNULL).splitlines()
     except (subprocess.CalledProcessError, FileNotFoundError):
-        dirty = ""
+        lines = []
+    dirty = any(line[3:].strip('"') not in generated for line in lines if line.strip())
     return sha + ("+" if dirty else "")
 
 

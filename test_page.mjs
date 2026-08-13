@@ -121,7 +121,7 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
         if (!renderView() && !($("#view").innerHTML || "").length) throw new Error('empty ' + code);
         out.views++;
         const pool = {}; for (const c of MATERIALS) pool[c] = (report.materials[c] || []).length;
-        const t = plan(code, 1, pool);
+        const t = plan(code, 1, pool, false);
         out.plans[code] = { short: t.ok ? 0 : 1, ...planTotals(t) };
       }
       for (const c of MATERIALS) {
@@ -149,31 +149,29 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
     console.error(`✗ 符文/宝石总数不符: ${cube.counts.runes}/${cube.counts.gems}`); ok = false;
   }
 
-  // A rune you already hold must plan to "just take it", costing nothing else.
+  // Asking to make a rune must never be answered with "here, take the one you
+  // already own" — the target is always cubed from its ingredients.
   for (const [code, p] of Object.entries(cube.plans)) {
-    const own = (report.materials[code] || []).length;
-    if (own > 0 && (p.short !== 0 || Object.keys(p.consumed).length !== 1)) {
-      console.error(`✗ ${code}: 已持有却给出了多余的合成步骤`); ok = false;
-    }
+    if (p.consumed[code]) { console.error(`✗ ${code}: 目标符文自己被当成材料消耗了`); ok = false; }
   }
   // El is the bottom of the ladder: 3 El make an Eld, so needing one Eld with an
   // empty pool must report exactly 3 missing El.
-  const empty = ctx.plan('r02', 1, {});
+  const empty = ctx.plan('r02', 1, {}, false);
   const em = ctx.planTotals(empty).missing;
   if (em.r01 !== 3 || Object.keys(em).length !== 1) { console.error(`✗ 空库存合成 Eld 的缺口不对: ${JSON.stringify(em)}`); ok = false; }
   // Lo (28) with nothing at all: dead branches collapse, so the answer is the
   // direct recipe (2 Ohm + 1 diamond), not billions of El runes.
-  const lo = ctx.planTotals(ctx.plan('r28', 1, {})).missing;
+  const lo = ctx.planTotals(ctx.plan('r28', 1, {}, false)).missing;
   if (lo.r27 !== 2 || lo.gsw !== 1 || Object.keys(lo).length !== 2) {
     console.error(`✗ 空库存合成 Lo 的缺口不对: ${JSON.stringify(lo)}`); ok = false;
   }
   console.log(`  空库存造 28 号（罗）直接缺：欧姆 ×${lo.r27}、钻石 ×${lo.gsw}`);
 
   // Feeding a plan exactly what it asked for must make it succeed...
-  const fed = ctx.planTotals(ctx.plan('r28', 1, { ...lo }));
+  const fed = ctx.planTotals(ctx.plan('r28', 1, { ...lo }, false));
   if (Object.keys(fed.missing).length) { console.error('✗ 按缺口补齐材料后仍然合成不了 Lo'); ok = false; }
   // ...and one item short must still report a gap.
-  const short = ctx.planTotals(ctx.plan('r28', 1, { ...lo, r27: 1 })).missing;
+  const short = ctx.planTotals(ctx.plan('r28', 1, { ...lo, r27: 1 }, false)).missing;
   if (!Object.keys(short).length) { console.error('✗ 少一个欧姆时没有报缺'); ok = false; }
   console.log('✓ 合成求解自洽：按缺口补齐即可成，少一件即报缺');
 
@@ -183,7 +181,8 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
       const pool = {};
       for (const c of MATERIALS) pool[c] = (report.materials[c] || []).reduce((t, x) => t + (x.n || 1), 0);
       const max = maxMakeable(code, pool);
-      return { max, atMax: plan(code, max, { ...pool }).ok, over: plan(code, max + 1, { ...pool }).ok };
+      return { max, atMax: plan(code, max, { ...pool }, false).ok,
+               over: plan(code, max + 1, { ...pool }, false).ok };
     };
   `, ctx);
   for (const code of ['r22', 'r25', 'r21', 'r30']) {
@@ -192,6 +191,9 @@ console.log(`✓ ${Object.keys(sizes).length} 个视图 (${Object.keys(sizes).jo
   }
   const g = ctx.__max('r25');
   if (g.max !== 1) { console.error(`✗ 古尔最多应为 1 个，实际 ${g.max}`); ok = false; }
+  // Owning two Ist must not be mistaken for "two Ist are already made".
+  const ist = ctx.__max('r24');
+  if (ist.max !== 1) { console.error(`✗ 伊司特最多应为 1 个（不算仓库现货），实际 ${ist.max}`); ok = false; }
   console.log(`✓ 上限自洽：古尔最多 ${g.max} 个、乌姆最多 ${ctx.__max('r22').max} 个（多一个即不成立）`);
 }
 

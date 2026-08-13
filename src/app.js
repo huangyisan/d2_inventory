@@ -367,16 +367,23 @@ function hideTip() {
   if (tipEl) tipEl.hidden = true;
 }
 
+// e.target can be a non-element (text node, document) during pointer events.
+const tipTarget = node => (node && node.closest ? node.closest('[data-tip]') : null);
+
 document.addEventListener('mouseover', e => {
-  const t = e.target.closest('[data-tip]');
-  if (t) showTip(t); else if (!e.target.closest('.tooltip')) hideTip();
+  const t = tipTarget(e.target);
+  if (t) showTip(t);
+  else if (!(e.target.closest && e.target.closest('.tooltip'))) hideTip();
 });
 document.addEventListener('mouseout', e => {
-  if (e.target.closest('[data-tip]')) hideTip();
+  const from = tipTarget(e.target);
+  if (!from) return;
+  // Moving between children of the same target must not dismiss the tooltip.
+  if (tipTarget(e.relatedTarget) !== from) hideTip();
 });
 document.addEventListener('click', e => {
   // Tap support on touch screens.
-  const t = e.target.closest('[data-tip]');
+  const t = tipTarget(e.target);
   if (t) showTip(t); else hideTip();
 });
 window.addEventListener('scroll', hideTip, true);

@@ -127,8 +127,11 @@
   .empty { color: var(--muted); padding: 30px 0; text-align: center; }
   .warn { background: var(--gold-bg); border: 1px solid var(--gold); color: var(--gold);
           border-radius: 8px; padding: 9px 14px; font-size: 13px; margin: 10px 0; }
-  /* Hover tooltip: item properties from the game data tables. */
-  [data-tip] { cursor: help; }
+  /* Hover tooltip: item properties from the game data tables.
+     The dotted underline is what tells you a name is hoverable. */
+  [data-tip] { cursor: help; text-decoration: underline dotted var(--dim); text-underline-offset: 3px; }
+  [data-tip]:hover { text-decoration-color: var(--gold); }
+  li.miss [data-tip] { text-decoration: line-through; text-decoration-color: var(--dim); }
   .tooltip {
     position: fixed; z-index: 50; max-width: 340px; pointer-events: none;
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px;

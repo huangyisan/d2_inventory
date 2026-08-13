@@ -520,7 +520,7 @@ function hit(entry, q) {
  * location words — mules are often named after what they hold — so the name is
  * tagged and styled rather than just concatenated into the sentence.
  */
-function copiesHtml(copies) {
+function copiesHtml(copies, { sockets = true } = {}) {
   return copies.map(c => {
     let head, tail;
     if (c.sourceType === 'stash') {
@@ -532,7 +532,7 @@ function copiesHtml(copies) {
     }
     if (c.n > 1) tail.push(`${c.n} 个一摞`);
     if (c.ethereal) tail.push('虚空');
-    if (c.sockets) tail.push(c.sockets + '孔');
+    if (sockets && c.sockets) tail.push(c.sockets + '孔');
     return `<b class="who">${head}</b>${tail.filter(Boolean).length ? ' · ' + tail.filter(Boolean).join(' · ') : ''}`;
   }).join('<br>');
 }
@@ -775,7 +775,7 @@ function viewSets() {
         <li class="${p.owned ? 'have' : (p.lost ? 'lost' : 'miss')}">
           <span class="slot">${esc(p.slot)}</span>
           <span class="pname"${tipFor(p)}>${esc(p.zh)}${dupeBadge(p.count)}</span>
-          <span class="loc">${p.owned ? copiesHtml(p.copies)
+          <span class="loc">${p.owned ? copiesHtml(p.copies, { sockets: false })
             : (p.lost ? '<span class="lostbadge">曾找到过</span>' : '未拥有')}</span>
         </li>`).join('')}</ul>
     </div>`).join('') + `</div>`;

@@ -32,6 +32,10 @@
     --use: #7db3f0; --bad: #f28a80; --bad-bg: #2e1614;
   }
   * { box-sizing: border-box; }
+  /* Always reserve the scrollbar's width: without it, switching to a shorter
+     page drops the scrollbar and the whole centred layout jumps sideways. */
+  html { scrollbar-gutter: stable; }
+  @supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
   html, body { max-width: 100%; overflow-x: hidden; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);

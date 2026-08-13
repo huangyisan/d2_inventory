@@ -32,6 +32,10 @@
     --use: #7db3f0; --bad: #f28a80; --bad-bg: #2e1614;
   }
   * { box-sizing: border-box; }
+  /* Always reserve the scrollbar's width: without it, switching to a shorter
+     page drops the scrollbar and the whole centred layout jumps sideways. */
+  html { scrollbar-gutter: stable; }
+  @supports not (scrollbar-gutter: stable) { html { overflow-y: scroll; } }
   html, body { max-width: 100%; overflow-x: hidden; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
@@ -250,7 +254,7 @@
 <body>
 <div class="wrap">
   <header>
-    <span class="ver" title="构建于 2026-08-13 22:29">a43e085+</span>
+    <span class="ver" title="构建于 2026-08-13 22:31">0a28f6b+</span>
     <h1>暗黑破坏神2 · 收藏台账</h1>
     <div class="status" id="status">选择你的存档文件夹开始。</div>
     <div class="actions">

@@ -501,7 +501,7 @@ document.addEventListener('drop', async e => {
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
 const ALL_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
-  ['dupes', '重复清理'], ['cube', '符文合成'], ['chars', '按小号']];
+  ['dupes', '重复清理'], ['cube', '符文合成']];
 // The chronicle tab only exists in D2R saves that have one.
 const TABS = () => ALL_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle);
 
@@ -827,31 +827,6 @@ function viewDupes() {
         <td>${copiesHtml(e.copies)}</td></tr>`).join('')}</tbody></table></div>`;
 }
 
-function viewChars() {
-  const q = state.q;
-  const byChar = {};
-  const push = (e, kind) => e.copies.forEach(c => {
-    (byChar[c.source] = byChar[c.source] || []).push({ ...e, kind, where: c.where });
-  });
-  report.uniques.forEach(u => u.owned && push({ ...u, group: '暗金' }, 'u'));
-  report.sets.forEach(g => g.pieces.forEach(p => p.owned && push({ ...p, group: g.zh }, 's')));
-
-  let rows = report.sources.filter(s => s.type !== 'error');
-  if (q) rows = rows.filter(s => s.name.toLowerCase().includes(q) || (byChar[s.name] || []).some(e => hit(e, q)));
-  if (!rows.length) return `<div class="empty">没有匹配的小号</div>`;
-
-  return rows.map(src => {
-    const list = (byChar[src.name] || []).filter(e => hit(e, q));
-    const who = src.type === 'stash' ? '共享仓库' : `${src.cls}${src.level ? ' · ' + src.level + '级' : ''}`;
-    return `<h2 class="section">${esc(src.name)} <span class="thin">— ${esc(who)} · 共 ${src.items} 件物品 · 其中 ${list.length} 件暗金/绿装</span></h2>
-      ${list.length ? `<div class="scroll"><table>
-        <thead><tr><th>部位</th><th>名称</th><th>所属</th><th>位置</th></tr></thead>
-        <tbody>${list.map(e => `<tr><td>${esc(e.slot)}</td>
-          <td class="name ${e.kind}"${tipFor(e)}><b>${esc(e.zh)}</b><span class="en">${esc(e.name)}</span></td>
-          <td>${esc(e.group)}</td><td>${esc(e.where)}</td></tr>`).join('')}</tbody>
-      </table></div>` : `<div class="empty">没有暗金或绿装</div>`}`;
-  }).join('');
-}
 
 /* ------------------------------------------------------------------ */
 /* Cube planner                                                        */
@@ -1034,7 +1009,7 @@ function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
   const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost,
-    dupes: viewDupes, cube: viewCube, chars: viewChars };
+    dupes: viewDupes, cube: viewCube };
   $('#view').innerHTML = fn[state.tab]();
 }
 

@@ -15,6 +15,7 @@ data/*
 !data/names_zh.json
 !data/drops.json
 !data/itemdrops.json
+!data/gamble.json
 
 # 本地便捷副本，内容与 dist/index.html 完全相同（避免每次重建双份写入历史）
 暗黑2存档管家.html

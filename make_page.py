@@ -74,6 +74,9 @@ def main():
     drops_path = os.path.join(DATA_DIR, "drops.json")
     if not os.path.exists(drops_path):
         subprocess.check_call([sys.executable, os.path.join(HERE, "make_drops.py")])
+    gamble_path = os.path.join(DATA_DIR, "gamble.json")
+    if not os.path.exists(gamble_path):
+        subprocess.check_call([sys.executable, os.path.join(HERE, "make_gamble.py")])
     tz_path = os.path.join(DATA_DIR, "tz.json")
     if not os.path.exists(tz_path):
         subprocess.check_call([sys.executable, os.path.join(HERE, "make_tz.py")])
@@ -86,6 +89,8 @@ def main():
         drops = fh.read()
     with open(itemdrops_path, encoding="utf-8") as fh:
         itemdrops = fh.read()
+    with open(gamble_path, encoding="utf-8") as fh:
+        gamble = fh.read()
     with open(os.path.join(SRC, "parser.js"), encoding="utf-8") as fh:
         parser = strip_modules(fh.read())
     with open(os.path.join(SRC, "app.js"), encoding="utf-8") as fh:
@@ -98,6 +103,7 @@ def main():
     tz = tz.replace("</", "<\\/")
     drops = drops.replace("</", "<\\/")
     itemdrops = itemdrops.replace("</", "<\\/")
+    gamble = gamble.replace("</", "<\\/")
 
     built = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     html = (page
@@ -107,6 +113,7 @@ def main():
             .replace("__TZ__", tz)
             .replace("__DROPS__", drops)
             .replace("__ITEMDROPS__", itemdrops)
+            .replace("__GAMBLE__", gamble)
             .replace("__PARSER__", parser)
             .replace("__APP__", app))
 

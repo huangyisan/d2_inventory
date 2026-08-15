@@ -269,6 +269,12 @@
   .tdrow b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
   .tdnote { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .tdnote b { color: var(--dupe); }
+  /* Gambling gets a dashed rule instead of a solid one: same card, but the
+     numbers above and below it are not on the same scale and must not be read
+     as one list. */
+  .tgamble { border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 7px; }
+  .tgamble .tlabel { color: var(--muted); font-size: 11.5px; margin-bottom: 2px; }
+  .tgamble .thin { font-weight: 400; color: var(--muted); }
   .mfbox { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
   .mfbox .pn { width: 4.5em; }
 
@@ -479,6 +485,10 @@
            number on the page, so it should stay in sight while you scroll. -->
       <label class="mfbox" id="mfwrap" hidden>魔法寻找
         <input class="pn" type="number" min="0" max="2000" value="0" id="mf" data-mf>%</label>
+      <!-- Gambling ignores magic find entirely and cares only about level, so
+           it gets its own box rather than sharing the one above. -->
+      <label class="mfbox" id="glvwrap" hidden>赌博等级
+        <input class="pn" type="number" min="1" max="99" value="99" id="glv" data-glv></label>
     </div>
     <div class="filters" id="filters"></div>
     <div id="view"></div>
@@ -497,6 +507,7 @@ const CATALOG = __CATALOG__;
 const TZ = __TZ__;
 const DROPS = __DROPS__;
 const DROPS_ITEMS = __ITEMDROPS__;
+const GAMBLE = __GAMBLE__;
 </script>
 <script>
 __PARSER__

@@ -17,7 +17,7 @@ let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
   target: null, qty: 1, day: 0, affixes: [], bases: [], zone: null,
   skClass: 'sor', skLevel: 99, skQuests: true, skPts: {},
-  dropBy: 'kill', pace: {}, mf: 0 };
+  dropBy: 'kill', pace: {}, mf: 0, glv: 99 };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 // day: which day the terror-zone list is showing, 0 = today.
 // affixes: the affix keys that must ALL be present, the filter's AND list.
@@ -169,6 +169,8 @@ const loadHandle = () => idb('readonly', s => s.get('dir')).catch(() => null);
  */
 const saveMF = n => idb('readwrite', s => s.put(n, 'mf')).catch(() => {});
 const loadMF = () => idb('readonly', s => s.get('mf')).catch(() => null);
+const saveGlv = n => idb('readwrite', s => s.put(n, 'glv')).catch(() => {});
+const loadGlv = () => idb('readonly', s => s.get('glv')).catch(() => null);
 const savePace = m => idb('readwrite', s => s.put(m, 'pace')).catch(() => {});
 const loadPace = () => idb('readonly', s => s.get('pace')).catch(() => null);
 const saveIcons = m => idb('readwrite', s => s.put(m, 'icons')).catch(() => {});
@@ -703,9 +705,60 @@ function dropChance(row, kind, mf) {
   return p0 * (at0 / atMF);
 }
 
+/*
+ * Gambling, kept in its own block on purpose.
+ *
+ * It shares no step with the boss numbers above it: no treasure class, no
+ * monster, and magic find does nothing at all. The only thing that moves it is
+ * your level, because every unique of the same base that your level unlocks
+ * takes a slice of the same pie. Putting the two side by side under one
+ * heading would invite adding them together, which is wrong.
+ */
+function gambleShare(rec, level) {
+  let share = 0;
+  for (const [min, s] of rec.steps) {
+    if (level < min) break;
+    share = s;
+  }
+  return share;
+}
+
+function gambleTip(name) {
+  const rec = GAMBLE.items[name];
+  if (!rec) return '';
+  const level = state.glv || 99;
+  const share = gambleShare(rec, level);
+  const best = rec.steps[0];
+  const p = GAMBLE.rate[rec.k] * share;
+
+  // Too low to roll it at all: the pool it would come from does not exist yet.
+  if (!share) {
+    return `<div class="tgamble">
+      <div class="tlabel">赌博 <span class="thin">不受魔法寻找影响</span></div>
+      <div class="tdnote">${level} 级赌不出，物品等级要到 <b>${best[0]}</b></div>
+    </div>`;
+  }
+
+  // Worth flagging only when dropping down actually buys something.
+  const gain = best[1] / share;
+  const window = gain > 1.05
+    ? `<div class="tdnote">卡在 <b>${best[0]}</b> 级赌是
+       <b>1 / ${Math.round(1 / (GAMBLE.rate[rec.k] * best[1])).toLocaleString('zh-CN')}</b>，
+       快 ${gain.toFixed(1)} 倍 —— 高等级会放更多同底材暗金进来抢名额</div>`
+    : `<div class="tdnote">等级高低对它没影响</div>`;
+
+  return `<div class="tgamble">
+    <div class="tlabel">赌博 <span class="thin">${level} 级 · 不受魔法寻找影响</span></div>
+    <div class="tdrow"><span>每赌一件</span>
+      <b>1 / ${Math.round(1 / p).toLocaleString('zh-CN')}</b></div>
+    ${window}
+  </div>`;
+}
+
 function dropTip(name) {
   const rec = ITEM_DROPS.items[name];
-  if (!rec) return '';
+  const gamble = gambleTip(name);
+  if (!rec) return gamble;
   const mf = state.mf || 0;
   const rows = rec.rows
     .map(r => ({ t: ITEM_DROPS.targets[r[0]], p: dropChance(r, rec.k, mf) }))
@@ -717,7 +770,7 @@ function dropTip(name) {
     <div class="tdnote">${rec.rivals > 1
       ? `同底材还有 <b>${rec.rivals - 1}</b> 件在抢这个名额`
       : '独占这个底材，不和别的抢'}</div>
-  </div>`;
+  </div>${gamble}`;
 }
 
 let tipEl = null;
@@ -836,13 +889,16 @@ function renderTop() {
 
 function renderTabs() {
   const tabs = TABS();
-  // Magic find only means anything where drop chances are shown.
-  const mfWrap = $('#mfwrap');
-  if (mfWrap) {
-    mfWrap.hidden = !(report && state.mode === 'gear' &&
-      ['uniques', 'sets', 'lost'].includes(state.tab));
-    const box = $('#mf');
-    if (box && String(box.value) !== String(state.mf)) box.value = state.mf;
+  // Magic find and gamble level only mean anything where chances are shown.
+  const onDropTab = report && state.mode === 'gear' &&
+    ['uniques', 'sets', 'lost'].includes(state.tab);
+  for (const [wrap, box, val] of [['#mfwrap', '#mf', state.mf],
+                                  ['#glvwrap', '#glv', state.glv]]) {
+    const w = $(wrap);
+    if (!w) continue;
+    w.hidden = !onDropTab;
+    const b = $(box);
+    if (b && String(b.value) !== String(val)) b.value = val;
   }
   $('#tabs').innerHTML = tabs.map(([k, l]) =>
     `<button class="tab" data-tab="${k}" aria-selected="${state.tab === k}">${l}</button>`).join('');
@@ -1998,6 +2054,11 @@ function numberInput(t, commit) {
     if (commit) saveMF(state.mf);
     return true;
   }
+  if (t.dataset.glv !== undefined) {
+    state.glv = Math.min(99, Math.max(1, Number(t.value) || 1));
+    if (commit) saveGlv(state.glv);
+    return true;
+  }
   if (t.dataset.sklevel !== undefined) {
     state.skLevel = Math.min(99, Math.max(1, Number(t.value) || 1));
     return true;
@@ -2007,14 +2068,16 @@ function numberInput(t, commit) {
 
 $('#view').addEventListener('input', e => { numberInput(e.target, false); });
 
-/* The magic-find box sits in the toolbar, outside #view. */
-$('#mfwrap').addEventListener('input', e => { numberInput(e.target, false); });
-$('#mfwrap').addEventListener('change', e => {
-  if (numberInput(e.target, true)) renderView();
-});
-$('#mfwrap').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target.blur) { e.preventDefault(); e.target.blur(); }
-});
+/* The magic-find and gamble-level boxes sit in the toolbar, outside #view. */
+for (const id of ['#mfwrap', '#glvwrap']) {
+  $(id).addEventListener('input', e => { numberInput(e.target, false); });
+  $(id).addEventListener('change', e => {
+    if (numberInput(e.target, true)) renderView();
+  });
+  $(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.blur) { e.preventDefault(); e.target.blur(); }
+  });
+}
 
 $('#view').addEventListener('change', e => {
   const t = e.target;
@@ -2046,6 +2109,14 @@ loadIcons().then(m => {
 loadMF().then(n => {
   if (typeof n === 'number' && n > 0) {
     state.mf = n;
+    if (report && state.mode === 'gear') { renderTabs(); renderView(); }
+  }
+});
+
+/* The level you gamble at, kept between visits. */
+loadGlv().then(n => {
+  if (typeof n === 'number' && n > 0) {
+    state.glv = n;
     if (report && state.mode === 'gear') { renderTabs(); renderView(); }
   }
 });

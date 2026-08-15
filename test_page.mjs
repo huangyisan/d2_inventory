@@ -403,6 +403,65 @@ print(json.dumps({"bad": bad,
   console.log(`  乔丹之石同底材有 ${idr.sojRivals} 件暗金在抢`);
 }
 
+/* --- gambling -------------------------------------------------------- */
+{
+  const gb = vm.runInContext(`(function () {
+    const out = {};
+    out.items = Object.keys(GAMBLE.items).length;
+    out.rateU = GAMBLE.rate.u;
+    out.rateS = GAMBLE.rate.s;
+    // Every step list must be ordered by level and never rise: rivals only get
+    // added as you level, so a share can only shrink.
+    for (const [name, rec] of Object.entries(GAMBLE.items)) {
+      if (!rec.steps.length) throw new Error('no steps for ' + name);
+      let prevLvl = -1, prevShare = 2;
+      for (const [lvl, share] of rec.steps) {
+        if (lvl <= prevLvl) throw new Error('steps out of order in ' + name);
+        if (share > prevShare) throw new Error('share grew with level in ' + name);
+        if (!(share > 0) || share > 1) throw new Error('bad share in ' + name);
+        prevLvl = lvl; prevShare = share;
+      }
+    }
+    const soj = GAMBLE.items['The Stone of Jordan'];
+    out.sojFloor = soj.steps[0][0];
+    out.below = gambleShare(soj, out.sojFloor - 1);   // too low to roll at all
+    out.atFloor = gambleShare(soj, out.sojFloor);
+    out.at99 = gambleShare(soj, 99);
+    out.gain = out.atFloor / out.at99;
+    // The gamble block is its own section and never merges into the boss list.
+    state.glv = 99;
+    const tip = dropTip('The Stone of Jordan');
+    out.separate = tip.includes('tgamble') && tip.includes('tdrop');
+    out.saysNoMF = tip.includes('不受魔法寻找影响');
+    state.glv = out.sojFloor;
+    out.movesWithLevel = dropTip('The Stone of Jordan') !== tip;
+    state.glv = 1;
+    out.tooLow = dropTip('The Stone of Jordan').includes('赌不出');
+    state.glv = 99;
+    // Magic find must not touch the gamble half of the card.
+    state.mf = 0; const m0 = gambleTip('The Stone of Jordan');
+    state.mf = 900; const m9 = gambleTip('The Stone of Jordan');
+    state.mf = 0;
+    out.mfIgnored = m0 === m9;
+    // Something the vendor never offers has no gamble line at all.
+    out.noOrbs = !GAMBLE.items["Death's Fathom"];
+    return out;
+  })()`, ctx);
+
+  if (gb.below !== 0) { console.error('✗ 等级不够时不该有赌博概率'); ok = false; }
+  if (!(gb.gain > 1.5)) { console.error('✗ 乔丹的卡级窗口没算出来'); ok = false; }
+  if (gb.rateS <= gb.rateU) { console.error('✗ 赌博出绿装应该比暗金容易一倍'); ok = false; }
+  if (!gb.separate) { console.error('✗ 赌博概率没和刷 boss 分开显示'); ok = false; }
+  if (!gb.saysNoMF || !gb.mfIgnored) { console.error('✗ 赌博不该受魔法寻找影响'); ok = false; }
+  if (!gb.movesWithLevel) { console.error('✗ 赌博概率没随等级变化'); ok = false; }
+  if (!gb.tooLow) { console.error('✗ 等级不够时没给出提示'); ok = false; }
+  if (!gb.noOrbs) { console.error('✗ 商人不卖的底材不该能赌'); ok = false; }
+  console.log(`✓ 赌博：${gb.items} 件可赌 · 出暗金 ${(gb.rateU * 100).toFixed(3)}%、` +
+    `绿装 ${(gb.rateS * 100).toFixed(3)}%（与魔法寻找无关，单独成块）`);
+  console.log(`  乔丹之石：${gb.sojFloor} 级占 ${(gb.atFloor * 100).toFixed(1)}%，` +
+    `99 级只剩 ${(gb.at99 * 100).toFixed(1)}%，卡级快 ${gb.gain.toFixed(1)} 倍`);
+}
+
 /* --- rune drop rates ------------------------------------------------- */
 {
   const dr = vm.runInContext(`(function () {

@@ -225,15 +225,12 @@
   .tzday .thin { font-weight: 400; color: var(--muted); font-size: 12.5px; }
   .tzday .sp { flex: 1; }
 
-  /* The whole terror-zone page lives in one width box, so the calendar's right
-     edge lines up under the zone picker's instead of sprawling across the page. */
-  .tzwrap { max-width: 760px; }
-  .tzpick { display: flex; align-items: center; gap: 8px;
+  /* Same width as every other page: the .wrap container decides it, nothing here. */
+  .tzpick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
             font-size: 13.5px; color: var(--muted); margin: 16px 0 0; }
-  /* Stretching the select is what makes the two right edges agree. */
   .tzsel { font: inherit; font-size: 13.5px; padding: 5px 10px; border-radius: 8px;
            border: 1px solid var(--line); background: var(--panel); color: var(--ink);
-           flex: 1; min-width: 0; }
+           flex: 0 1 380px; min-width: 0; }
 
   /* Following one zone:每天一行，后面跟这天的所有场次。 */
   .tzdays { display: flex; flex-direction: column; gap: 4px; }
@@ -246,10 +243,12 @@
            border: 1px solid var(--line); color: var(--ink); }
   .tzhit.now { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); font-weight: 700; }
 
-  /* Two long strips per row inside that box. Long map names wrap rather than
-     being cut off — nothing here is explained anywhere else. */
-  .tzlist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
-  @media (max-width: 620px) { .tzlist { grid-template-columns: 1fr; } }
+  /* Four long strips per row. Long map names wrap rather than being cut off —
+     nothing here is explained anywhere else. */
+  .tzlist { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  @media (max-width: 1100px) { .tzlist { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 820px)  { .tzlist { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px)  { .tzlist { grid-template-columns: 1fr; } }
   .tzrow { display: flex; align-items: baseline; gap: 7px; padding: 4px 9px;
            background: var(--panel); border: 1px solid var(--line);
            border-radius: 7px; font-size: 12.5px; min-width: 0; }

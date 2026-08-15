@@ -79,6 +79,16 @@
 - 缺口报在**断掉的那一层**，不会展开成「差 17 亿个艾尔符文」
 - 1 号艾尔没有配方，会直接说明它只能靠掉落
 
+点中某个符文时，下面还会列出**它上哪掉**：地狱难度下各个可刷目标的每杀期望，
+从高到低排，最高的标「推荐」。数字由 `make_drops.py` 走游戏自己的
+`treasureclassex` 掉落树逐层算出，不是抄的。
+
+真正有用的不是概率而是**上限**：多数 Boss 的掉落链止步于某个 `Runes N`，
+再高的符文一个都出不来。地狱女伯爵每杀掉 2.27 个符文，却最高只到 28 号；
+33 号卓德全场只有 7 个来源。掉不出来的目标直接不列。
+
+魔法寻找对符文**没有**影响；多人游戏会降低空掉率，页面按单人算。
+
 升级配方：10 号以下 3 换 1，11–21 号 3 换 1 加宝石，22 号往上 2 换 1 加更高品质宝石；
 宝石 3 颗同色同级升一级。自动分类储物箱里的符文宝石是**成摞**的，按摞里的数量计。
 已镶进装备的不计入可用材料。
@@ -156,6 +166,7 @@ python3 fetch_t2s.py       # 下载 OpenCC 繁转简对照表
 python3 fetch_props.py     # 下载属性/技能表
 python3 make_catalog.py    # 生成内嵌用的精简目录 data/catalog.json
 python3 make_tz.py         # 下载并压缩恐怖地带排期 data/tz.json
+python3 make_drops.py      # 走掉落树算符文掉率 data/drops.json
 python3 make_page.py       # 打包成单文件 暗黑2存档管家.html
 ```
 
@@ -172,6 +183,7 @@ node test_page.mjs                             # 加载打包产物并核对统�
 - `src/app.js` — 目录选择、交叉比对、渲染
 - `src/page.html` — 页面骨架与样式
 - `make_tz.py` — 恐怖地带排期：下载上游原始表并压成 `data/tz.json`
+- `make_drops.py` — 符文掉率：走 `treasureclassex` 掉落树算出每杀期望
 - `data/names_zh.json` — 人工译名表，补公开数据表还没有的中文名
 - `props.py` — 属性码 → 中文描述的渲染器
 - `d2parse.py` — Python 参考解析器，用于交叉验证

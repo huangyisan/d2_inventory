@@ -68,6 +68,9 @@ def main():
     catalog_path = os.path.join(DATA_DIR, "catalog.json")
     if not os.path.exists(catalog_path):
         subprocess.check_call([sys.executable, os.path.join(HERE, "make_catalog.py")])
+    drops_path = os.path.join(DATA_DIR, "drops.json")
+    if not os.path.exists(drops_path):
+        subprocess.check_call([sys.executable, os.path.join(HERE, "make_drops.py")])
     tz_path = os.path.join(DATA_DIR, "tz.json")
     if not os.path.exists(tz_path):
         subprocess.check_call([sys.executable, os.path.join(HERE, "make_tz.py")])
@@ -76,6 +79,8 @@ def main():
         catalog = fh.read()
     with open(tz_path, encoding="utf-8") as fh:
         tz = fh.read()
+    with open(drops_path, encoding="utf-8") as fh:
+        drops = fh.read()
     with open(os.path.join(SRC, "parser.js"), encoding="utf-8") as fh:
         parser = strip_modules(fh.read())
     with open(os.path.join(SRC, "app.js"), encoding="utf-8") as fh:
@@ -86,6 +91,7 @@ def main():
     # Guard against an early </script> closing the inline block.
     catalog = catalog.replace("</", "<\\/")
     tz = tz.replace("</", "<\\/")
+    drops = drops.replace("</", "<\\/")
 
     built = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     html = (page
@@ -93,6 +99,7 @@ def main():
             .replace("__BUILT__", built)
             .replace("__CATALOG__", catalog)
             .replace("__TZ__", tz)
+            .replace("__DROPS__", drops)
             .replace("__PARSER__", parser)
             .replace("__APP__", app))
 

@@ -1055,6 +1055,7 @@ function viewCube() {
           <div class="sub">仓库里有 ${n} 个。</div>
         </div>
         ${n ? `<div class="hint">现货在：${copiesHtml(report.materials[code])}</div>` : ''}
+        ${dropPanel(code)}
       </div></div>`;
   }
 
@@ -1092,12 +1093,67 @@ function viewCube() {
       </div>
       ${ownedOf(code) ? `<div class="hint">现货在：${copiesHtml(report.materials[code])}</div>` : ''}
       <div class="plan">${planTree(tree)}</div>
+      ${dropPanel(code)}
     </div>
   </div>`;
 }
 
 // Cheapest first, so the consumed/missing lists read high-value material last.
 const MATERIALS_ORDER = [...GEM_CODES, ...RUNES];
+
+
+/* ------------------------------------------------------------------ */
+/* Rune drop rates                                                     */
+/* ------------------------------------------------------------------ */
+/*
+ * Where a rune actually comes from, computed by make_drops.py by walking the
+ * game's treasure-class tree. The number is the expected count per kill, which
+ * at these odds is the same as "chance to see one".
+ *
+ * The useful part is not the odds so much as the ceiling: most bosses cannot
+ * roll the high runes at all, because their chain tops out at a low "Runes N".
+ * Hell Countess showers you with runes and still cannot hand you a 25.
+ */
+const DROP_IDX = new Map(DROPS.runes.map((c, i) => [c, i]));
+
+const oneIn = e => e >= 1 ? `${e.toFixed(2)} 个/杀`
+  : `1 / ${Math.round(1 / e).toLocaleString('zh-CN')}`;
+
+function dropRows(code) {
+  const i = DROP_IDX.get(code);
+  if (i === undefined) return [];
+  return DROPS.targets
+    .map(t => ({ ...t, rate: t.rates[i] }))
+    .filter(t => t.rate > 0)
+    .sort((a, b) => b.rate - a.rate);
+}
+
+function dropPanel(code) {
+  const rows = dropRows(code);
+  const zh = matZh(code);
+  if (!rows.length) {
+    const best = DROPS.targets.reduce((m, t) => Math.max(m, t.top), 0);
+    return `<div class="drops">
+      <h3>${runeNo(code)} 号 ${esc(zh)} 上哪掉</h3>
+      <div class="empty">列表里的目标都掉不出这个符文（最高只到 ${best} 号）。
+        这一档只能靠恐怖地带里的高等级怪，或者自己合成。</div>
+    </div>`;
+  }
+  const best = rows[0].rate;
+  return `<div class="drops">
+    <h3>${runeNo(code)} 号 ${esc(zh)} 上哪掉 <span class="thin">地狱难度 · 单人</span></h3>
+    <div class="droplist">${rows.map(t => `
+      <div class="droprow${t.rate === best ? ' best' : ''}">
+        <span class="a">第${'一二三四五'[t.act - 1]}幕</span>
+        <span class="n">${esc(t.zh)}</span>
+        <span class="r">${oneIn(t.rate)}</span>
+        ${t.rate === best ? '<span class="rec">推荐</span>' : ''}
+      </div>`).join('')}</div>
+    <p class="hint">数字是每杀一次期望掉几个，由游戏掉落表逐层算出，不是抄来的。
+      魔法寻找对符文<b>没有</b>影响；多人游戏会降低空掉率，这里按单人算。
+      掉不出某个符文的目标直接不列 —— 那是掉落表的硬上限，刷再多也不会出。</p>
+  </div>`;
+}
 
 /* ------------------------------------------------------------------ */
 /* Affix filter                                                        */

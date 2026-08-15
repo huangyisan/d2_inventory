@@ -262,6 +262,25 @@
   .afmod.eth { border-color: var(--use); color: var(--use); font-weight: 600; }
   .empty { color: var(--muted); font-size: 13.5px; padding: 20px 2px; }
 
+  /* ---- Rune drop rates ---- */
+  .drops { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .drops h3 { margin: 0 0 9px; font-size: 14.5px; }
+  .drops h3 .thin { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .droplist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px 14px; }
+  @media (max-width: 700px) { .droplist { grid-template-columns: 1fr; } }
+  .droprow { display: flex; align-items: baseline; gap: 8px; padding: 4px 8px;
+             border: 1px solid transparent; border-radius: 7px; font-size: 13px; }
+  .droprow .a { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .droprow .n { flex: 1; min-width: 0; }
+  .droprow .r { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: 12px; white-space: nowrap; }
+  /* The best target for this rune, which is the whole question being asked. */
+  .droprow.best { border-color: var(--gold); background: var(--gold-bg); font-weight: 600; }
+  .droprow.best .r, .droprow.best .n { color: var(--gold); }
+  .rec { font-size: 10.5px; font-weight: 700; color: var(--gold);
+         border: 1px solid var(--gold); border-radius: 999px; padding: 0 6px; white-space: nowrap; }
+  .drops .hint { margin-top: 10px; }
+
   /* ---- Terror zones ---- */
   .tzday { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; }
   .tzday h3 { margin: 0; font-size: 15px; }
@@ -453,6 +472,7 @@
 <script>
 const CATALOG = __CATALOG__;
 const TZ = __TZ__;
+const DROPS = __DROPS__;
 </script>
 <script>
 __PARSER__

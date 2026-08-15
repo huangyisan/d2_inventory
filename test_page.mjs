@@ -339,6 +339,45 @@ print(json.dumps({"bad": bad,
   console.log(`  同时满足的戒指：${af.rings} 件`);
 }
 
+/* --- rune drop rates ------------------------------------------------- */
+{
+  const dr = vm.runInContext(`(function () {
+    const out = {};
+    // Every target must be reachable and every rate a real number.
+    for (const t of DROPS.targets) {
+      if (t.rates.length !== 33) throw new Error('bad rate row ' + t.key);
+      for (const r of t.rates) if (!(r >= 0)) throw new Error('bad rate in ' + t.key);
+      const top = t.rates.reduce((m, r, i) => r > 0 ? i + 1 : m, 0);
+      if (top !== t.top) throw new Error('top mismatch ' + t.key);
+    }
+    // Sorted best first, and exactly one target flagged.
+    const rows = dropRows('r28');
+    out.lo = rows.map(r => [r.zh, r.rate]);
+    out.sorted = rows.every((r, i) => i === 0 || rows[i - 1].rate >= r.rate);
+    out.loBest = rows.length ? rows[0].zh : null;
+    // The ceiling is the point: Hell Countess showers runes and still tops out
+    // below the high ones, so she must not be offered for a 33.
+    const zod = dropRows('r33');
+    out.zodTargets = zod.map(r => r.zh);
+    out.countessInZod = zod.some(r => r.key === 'countess');
+    const c = DROPS.targets.find(t => t.key === 'countess');
+    out.countessTop = c.top;
+    out.countessAny = c.any;
+    // Panels render for every rune, including the ones nothing can drop.
+    out.panels = 0;
+    for (const code of RUNES) { if (dropPanel(code).length) out.panels++; }
+    return out;
+  })()`, ctx);
+
+  if (!dr.sorted) { console.error('✗ 掉落列表没有按概率排序'); ok = false; }
+  if (dr.countessInZod) { console.error('✗ 女伯爵被列进了 33 号的掉落来源'); ok = false; }
+  if (dr.panels !== 33) { console.error(`✗ 只有 ${dr.panels} 个符文有掉落面板`); ok = false; }
+  if (!dr.zodTargets.length) { console.error('✗ 33 号一个掉落来源都没有'); ok = false; }
+  console.log(`✓ 符文掉落：28 号最佳目标是「${dr.loBest}」· ` +
+    `33 号只有 ${dr.zodTargets.length} 个来源（${dr.zodTargets.join('、')}）`);
+  console.log(`  女伯爵每杀出 ${dr.countessAny} 个符文，但最高只到 ${dr.countessTop} 号`);
+}
+
 /* --- runeword bases -------------------------------------------------- */
 {
   vm.runInContext(`globalThis.__bases = function (rep) {

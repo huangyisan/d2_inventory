@@ -1,6 +1,11 @@
 {
   "_comment": "手工译名。新内容（憎恨之王等）的中文串还没进任何公开数据表，页面只能显示英文原名；在这里补一条就补一个。键是英文原名或字符串 key，值是中文名。以 _ 开头的键会被忽略。",
 
+  "Bane's Garments": "贝恩的衣装",
+  "Bane's Authority": "贝恩的权威",
+  "Bane's Oathmaker": "贝恩的誓立者",
+  "Bane's Wraithskin": "贝恩的灵肤",
+
   "Horazon's Splendor": "赫拉森的辉煌",
   "Horazon's Countenance": "赫拉森的面容",
   "Horazon's Dominion": "赫拉森的统治",

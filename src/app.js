@@ -1232,7 +1232,6 @@ const TZ_STEP = TZ.step * 1000;
 const TZ_COUNT = TZ.slots.length;
 const TZ_END = TZ_START + TZ_STEP * TZ_COUNT;
 
-const IMMUNE = { c: '冰', f: '火', l: '电', p: '毒', ph: '物理' };
 const ACT_ZH = ['', '一', '二', '三', '四', '五'];
 const actZh = n => `第${ACT_ZH[n] || n}幕`;
 
@@ -1282,17 +1281,8 @@ function viewTz() {
       拉取新排期后重新打包即可。</div>`;
   }
 
-  // No banner: the highlighted strip in the calendar is the current zone, and
-  // the countdown lives on it. What the banner used to spell out — immunities,
-  // boss packs, super uniques — moves into each strip's hover text.
-  function tip(zz) {
-    const bits = [zz.en];
-    const imm = (zz.imm || []).map(k => IMMUNE[k] || k).join('、');
-    if (imm) bits.push(`免疫：${imm}`);
-    if ((zz.packs || []).length === 2) bits.push(`首领组：${zz.packs[0]}~${zz.packs[1]} 组`);
-    if ((zz.su || []).length) bits.push(`超级唯一怪：${zz.su.join('、')}`);
-    return bits.join('\n');
-  }
+  // No banner and no hover text: the calendar says the time, the act and the
+  // map, and that is the whole of it. The countdown rides on the current strip.
   const ends = TZ_START + (cur + 1) * TZ_STEP;
   const countdown = `<b class="tzleft" id="tzleft" data-ends="${ends}">${mmss(ends - now)}</b>`;
 
@@ -1380,7 +1370,7 @@ function viewTz() {
       const zz = tzZone(i);
       const t = tzTime(i);
       const cls = i === cur ? 'now' : (TZ_START + (i + 1) * TZ_STEP <= now ? 'past' : '');
-      html += `<div class="tzrow ${cls} a${zz.act}" title="${esc(tip(zz))}">
+      html += `<div class="tzrow ${cls} a${zz.act}">
         <span class="t">${hhmm(t)}</span>
         <span class="act">${actZh(zz.act)}</span>
         <span class="z">${esc(zz.zh)}</span>

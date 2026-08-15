@@ -262,6 +262,16 @@
   .afmod.eth { border-color: var(--use); color: var(--use); font-weight: 600; }
   .empty { color: var(--muted); font-size: 13.5px; padding: 20px 2px; }
 
+  /* Where an item drops, inside the hover card. */
+  .tdrop { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 7px; }
+  .tdrop .thin { font-weight: 400; color: var(--muted); }
+  .tdrow { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; padding: 1px 0; }
+  .tdrow b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; }
+  .tdnote { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .tdnote b { color: var(--dupe); }
+  .mfbox { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+  .mfbox .pn { width: 4.5em; }
+
   /* ---- Rune drop rates ---- */
   .drops { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 14px; }
   .drops h3 { margin: 0 0 9px; font-size: 14.5px; }
@@ -482,6 +492,7 @@
 const CATALOG = __CATALOG__;
 const TZ = __TZ__;
 const DROPS = __DROPS__;
+const DROPS_ITEMS = __ITEMDROPS__;
 </script>
 <script>
 __PARSER__

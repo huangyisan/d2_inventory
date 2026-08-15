@@ -339,6 +339,55 @@ print(json.dumps({"bad": bad,
   console.log(`  同时满足的戒指：${af.rings} 件`);
 }
 
+/* --- item drop rates ------------------------------------------------- */
+{
+  const idr = vm.runInContext(`(function () {
+    const out = {};
+    out.items = Object.keys(ITEM_DROPS.items).length;
+    out.targets = ITEM_DROPS.targets.length;
+    // Every stored row must point at a real target and carry sane numbers.
+    for (const [name, rec] of Object.entries(ITEM_DROPS.items)) {
+      if (!rec.rows.length) throw new Error('no rows for ' + name);
+      for (const r of rec.rows) {
+        if (!ITEM_DROPS.targets[r[0]]) throw new Error('bad target index in ' + name);
+        if (!(r[1] > 0) || !(r[2] > 0) || !(r[3] > 0)) throw new Error('bad numbers in ' + name);
+      }
+    }
+    // Magic find helps, with diminishing returns, and never beyond the cap.
+    const soj = ITEM_DROPS.items['The Stone of Jordan'];
+    const at = mf => dropChance(soj.rows[0], 'u', mf);
+    out.mf0 = at(0); out.mf100 = at(100); out.mf1000 = at(1000);
+    out.gain100 = out.mf100 / out.mf0;
+    out.gain1000 = out.mf1000 / out.mf0;
+    out.sojRivals = soj.rivals;
+    // Uniques are penalised harder than sets: a bigger factor means milder
+    // diminishing returns, and sets carry 500 against the uniques' 250.
+    out.uEff = effectiveMF(500, 'u');
+    out.sEff = effectiveMF(500, 's');
+    // The tooltip renders, names the rivals, and moves with magic find.
+    state.mf = 0;
+    const a = dropTip('The Stone of Jordan');
+    state.mf = 500;
+    const b = dropTip('The Stone of Jordan');
+    state.mf = 0;
+    out.tipOk = a.includes('上哪掉') && a.includes('10') && a !== b;
+    out.noTipForJunk = dropTip('这不是个物品') === '';
+    return out;
+  })()`, ctx);
+
+  if (idr.gain100 <= 1 || idr.gain1000 <= idr.gain100) {
+    console.error('✗ 魔法寻找没有单调提升掉率'); ok = false;
+  }
+  if (idr.gain1000 > 3.2) { console.error(`✗ MF 1000 收益 ${idr.gain1000.toFixed(2)}x，超出递减上限`); ok = false; }
+  if (idr.sEff <= idr.uEff) { console.error('✗ 暗金的魔法寻找递减应比绿装更狠'); ok = false; }
+  if (!idr.tipOk) { console.error('✗ 掉落提示没渲染出来或不随魔法寻找变化'); ok = false; }
+  if (!idr.noTipForJunk) { console.error('✗ 不认识的物品也给了掉落提示'); ok = false; }
+  console.log(`✓ 物品掉落：${idr.items} 件 × ${idr.targets} 个目标 · ` +
+    `魔法寻找 100 → ${idr.gain100.toFixed(2)}x，1000 → ${idr.gain1000.toFixed(2)}x（递减正常）`);
+  console.log(`  同样 500 MF：暗金只当 ${idr.uEff}%，绿装当 ${idr.sEff}%`);
+  console.log(`  乔丹之石同底材有 ${idr.sojRivals} 件暗金在抢`);
+}
+
 /* --- rune drop rates ------------------------------------------------- */
 {
   const dr = vm.runInContext(`(function () {

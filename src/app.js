@@ -17,7 +17,7 @@ let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
   target: null, qty: 1, day: 0, affixes: [], bases: [], zone: null,
   skClass: 'sor', skLevel: 99, skQuests: true, skPts: {},
-  dropBy: 'kill', pace: {} };
+  dropBy: 'kill', pace: {}, mf: 0 };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 // day: which day the terror-zone list is showing, 0 = today.
 // affixes: the affix keys that must ALL be present, the filter's AND list.
@@ -25,6 +25,7 @@ let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: '
 // zone: index into the terror-zone table when following one zone, else null.
 // sk*: the skill planner's class, character level, quest bonus and spent points.
 // dropBy/pace: per-kill vs per-hour on the rune drop panel, and your own run pace.
+// mf: your magic find, which only ever affects item drops — never runes.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -166,6 +167,8 @@ const loadHandle = () => idb('readonly', s => s.get('dir')).catch(() => null);
  * the bundle. Stored as data URLs so they survive a refresh without asking for
  * folder permission again.
  */
+const saveMF = n => idb('readwrite', s => s.put(n, 'mf')).catch(() => {});
+const loadMF = () => idb('readonly', s => s.get('mf')).catch(() => null);
 const savePace = m => idb('readwrite', s => s.put(m, 'pace')).catch(() => {});
 const loadPace = () => idb('readonly', s => s.get('pace')).catch(() => null);
 const saveIcons = m => idb('readwrite', s => s.put(m, 'icons')).catch(() => {});
@@ -611,7 +614,9 @@ const TIPS = new Map();
 let tipSeq = 0;
 
 function tipFor(entry, extraTitle) {
-  if (!entry.props || !entry.props.length) return '';
+  // An item with no listed properties can still be worth hovering if we know
+  // where it drops.
+  if ((!entry.props || !entry.props.length) && !ITEM_DROPS.items[entry.name]) return '';
   const id = 't' + (++tipSeq);
   TIPS.set(id, { entry, extraTitle });
   return ` data-tip="${id}"`;
@@ -663,9 +668,56 @@ function renderTip(id) {
       <div class="tname ${e.kind === 's' || e.id !== undefined ? 's' : 'u'}">${esc(e.zh)}</div>
       <div class="tbase">${esc(e.base_zh || e.base || '')}${e.lvlreq ? ` · 需求等级 ${e.lvlreq}` : ''}</div>
     </div>
-    <div class="tbody">${e.props.map(line).join('')}</div>
+    <div class="tbody">${(e.props || []).map(line).join('')}</div>
     ${e.bonus && e.bonus.length ? `<div class="tbonus"><div class="tlabel">套装加成</div>${e.bonus.map(line).join('')}</div>` : ''}
+    ${dropTip(e.name)}
     <div class="tfoot">数值取自游戏数据表，区间表示该属性会浮动</div>`;
+}
+
+
+/* ------------------------------------------------------------------ */
+/* Where an item drops                                                 */
+/* ------------------------------------------------------------------ */
+/*
+ * Precomputed by make_itemdrops.py at zero magic find, plus the two numbers
+ * needed to rescale for any magic find — because magic find is a property of
+ * your character, not of the game tables.
+ *
+ * Magic find has diminishing returns on uniques and sets, and by different
+ * amounts: the factor is 250 for uniques, 500 for sets. 1000 MF is worth about
+ * 3x on a unique, not 11x.
+ */
+const ITEM_DROPS = DROPS_ITEMS;
+const MF_FACTOR = { u: 250, s: 500 };
+
+const effectiveMF = (mf, kind) => {
+  const f = MF_FACTOR[kind] || 250;
+  return mf > 0 ? Math.floor((mf * f) / (mf + f)) : 0;
+};
+
+/* Rescale the stored zero-MF answer to the magic find you actually carry. */
+function dropChance(row, kind, mf) {
+  const [, p0, cb, mn] = row;
+  const at0 = Math.max(mn, cb);
+  const atMF = Math.max(mn, Math.floor((cb * 100) / (100 + effectiveMF(mf, kind))));
+  return p0 * (at0 / atMF);
+}
+
+function dropTip(name) {
+  const rec = ITEM_DROPS.items[name];
+  if (!rec) return '';
+  const mf = state.mf || 0;
+  const rows = rec.rows
+    .map(r => ({ t: ITEM_DROPS.targets[r[0]], p: dropChance(r, rec.k, mf) }))
+    .sort((a, b) => b.p - a.p);
+  return `<div class="tdrop">
+    <div class="tlabel">上哪掉 <span class="thin">地狱 · 魔法寻找 ${mf}</span></div>
+    ${rows.map(r => `<div class="tdrow"><span>${esc(r.t.zh)}</span>
+      <b>1 / ${Math.round(1 / r.p).toLocaleString('zh-CN')}</b></div>`).join('')}
+    <div class="tdnote">${rec.rivals > 1
+      ? `同底材还有 <b>${rec.rivals - 1}</b> 件在抢这个名额`
+      : '独占这个底材，不和别的抢'}</div>
+  </div>`;
 }
 
 let tipEl = null;
@@ -805,6 +857,11 @@ function renderFilters() {
     html += '<span class="sep"></span>';
     html += [['progress', '按进度排'], ['name', '按名称排'], ['missing', '按缺得最多排']]
       .map(([k, l]) => `<button class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
+  }
+  if (state.tab === 'uniques' || state.tab === 'sets' || state.tab === 'lost') {
+    if (html) html += '<span class="sep"></span>';
+    html += `<label class="mfbox">魔法寻找
+      <input class="pn" type="number" min="0" max="2000" value="${state.mf}" data-mf>%</label>`;
   }
   if (showSlot) {
     if (html) html += '<span class="sep"></span>';
@@ -1933,6 +1990,11 @@ function numberInput(t, commit) {
     if (commit) savePace(state.pace);
     return true;
   }
+  if (t.dataset.mf !== undefined) {
+    state.mf = Math.min(2000, Math.max(0, Number(t.value) || 0));
+    if (commit) saveMF(state.mf);
+    return true;
+  }
   if (t.dataset.sklevel !== undefined) {
     state.skLevel = Math.min(99, Math.max(1, Number(t.value) || 1));
     return true;
@@ -1965,6 +2027,14 @@ loadIcons().then(m => {
   if (m && Object.keys(m).length) {
     SKILL_ICONS = m;
     if (state.mode === 'skills') renderView();
+  }
+});
+
+/* Your magic find, kept between visits. */
+loadMF().then(n => {
+  if (typeof n === 'number' && n > 0) {
+    state.mf = n;
+    if (report && state.mode === 'gear') { renderFilters(); renderView(); }
   }
 });
 

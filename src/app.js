@@ -15,11 +15,12 @@ let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
-  target: null, qty: 1, day: 0, affixes: [], zone: null,
+  target: null, qty: 1, day: 0, affixes: [], bases: [], zone: null,
   skClass: 'sor', skLevel: 99, skQuests: true, skPts: {} };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 // day: which day the terror-zone list is showing, 0 = today.
 // affixes: the affix keys that must ALL be present, the filter's AND list.
+// bases: same idea on the runeword-base tab (white / superior / ethereal / sockets).
 // zone: index into the terror-zone table when following one zone, else null.
 // sk*: the skill planner's class, character level, quest bonus and spent points.
 
@@ -300,9 +301,16 @@ function buildReport(sources) {
         sets[gi].pieces[pi].copies.push(copy);
         notable++;
       }
-      if ((it.stats || []).length && !it.socketedIn) {
+      // Anything you could wear. Plain white armour and weapons carry no
+      // affixes at all, so "has stats" would drop exactly the items that make
+      // the best runeword bases — the base-item flags decide instead.
+      const b = CATALOG.bases[it.code];
+      // FLAG_ARMOR / FLAG_WEAPON come from the parser's own flag table.
+      const wearable = !!(b && (b[2] & (FLAG_ARMOR | FLAG_WEAPON)));
+      if (!it.socketedIn && (wearable || (it.stats || []).length)) {
         gear.push({ ...copy, ...gearName(it), slot: it.slot, quality: it.quality,
-          code: it.code, stats: it.stats });
+          code: it.code, stats: it.stats, wearable,
+          sockets: it.sockets || 0, ethereal: !!it.ethereal });
       }
     }
     sourceRows.push({
@@ -553,7 +561,7 @@ document.addEventListener('drop', async e => {
 // telling you where the terror zone is. Only the first two need a save file.
 const MODES = [['gear', '装备收藏'], ['runes', '符文合成'], ['tz', '恐怖地带'], ['skills', '天赋模拟']];
 const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['affix', '词条筛选'],
-  ['lost', '找回清单'], ['dupes', '重复清理']];
+  ['base', '底材筛选'], ['lost', '找回清单'], ['dupes', '重复清理']];
 // The chronicle tab only exists in D2R saves that have one.
 const TABS = () => (state.mode !== 'gear' || !report ? []
   : GEAR_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle));
@@ -780,7 +788,7 @@ function renderTabs() {
 
 function renderFilters() {
   if (state.mode !== 'gear' || !report) { $('#filters').innerHTML = ''; return; }
-  const showSlot = state.tab === 'uniques' || state.tab === 'lost' || state.tab === 'affix';
+  const showSlot = ['uniques', 'lost', 'affix', 'base'].includes(state.tab);
   const showOnly = state.tab === 'uniques' || state.tab === 'sets';
   let html = '';
   if (showOnly) {
@@ -1229,6 +1237,78 @@ function viewAffix() {
   return html;
 }
 
+
+/*
+ * Runeword / crafting bases: the plain white and ethereal gear sitting in your
+ * stash. These carry no affixes, so the affix filter cannot reach them — what
+ * matters here is quality, sockets and whether it is ethereal.
+ */
+const BASE_FILTERS = [
+  { key: 'normal', zh: '白装', hit: g => g.quality === 'normal' },
+  { key: 'superior', zh: '高质量', hit: g => g.quality === 'superior' },
+  { key: 'eth', zh: '无形', hit: g => g.ethereal },
+  { key: 'socketed', zh: '已开孔', hit: g => g.sockets > 0 },
+  { key: 'empty', zh: '没开孔', hit: g => !g.sockets },
+];
+const BASE_BY_KEY = new Map(BASE_FILTERS.map(f => [f.key, f]));
+
+function viewBases() {
+  const picked = state.bases.map(k => BASE_BY_KEY.get(k)).filter(Boolean);
+
+  let html = `<div class="afbar">
+    <div class="aftitle">同时满足（与）：${picked.length
+      ? picked.map(f => `<b>${f.zh}</b>`).join(' + ')
+      : '<span class="thin">还没选，下面列出全部可当底材的装备</span>'}
+      ${picked.length ? '<button class="chip clr" data-base="">清空</button>' : ''}</div>
+    <div class="afchips">${BASE_FILTERS.map(f =>
+      `<button class="chip" data-base="${f.key}" aria-pressed="${state.bases.includes(f.key)}">${f.zh}</button>`).join('')}</div>
+  </div>`;
+
+  // A finished runeword sits on a white base and reads as "normal" quality in
+  // the save, but it is spent — you cannot build anything else on it.
+  let rows = report.gear.filter(g => g.wearable && g.kind !== 'runeword' &&
+    (!state.slot || g.slot === state.slot) &&
+    hit(g, state.q) &&
+    picked.every(f => f.hit(g)));
+
+  // Most sockets first: that is what decides which runewords a base can hold.
+  rows = rows.slice().sort((x, y) => (y.sockets - x.sockets) ||
+    (SLOTS.indexOf(x.slot) - SLOTS.indexOf(y.slot)) || x.zh.localeCompare(y.zh, 'zh'));
+
+  const eth = rows.filter(g => g.ethereal).length;
+  html += `<div class="afcount">符合的装备：<b>${rows.length}</b> 件${
+    eth ? `（其中无形 ${eth} 件）` : ''}
+    <span class="thin">已做成符文之语的不算，那些底材已经用掉了</span></div>`;
+
+  if (!rows.length) {
+    html += '<div class="empty">存档里没有同时满足这些条件的装备。</div>';
+    return html;
+  }
+
+  html += '<div class="aflist">';
+  for (const g of rows) {
+    const kind = g.kind === 'unique' ? 'u' : g.kind === 'set' ? 's'
+      : g.kind === 'runeword' ? 'w' : g.kind === 'rare' ? 'r' : g.kind === 'crafted' ? 'c' : 'm';
+    html += `<div class="afitem">
+      <div class="afhead">
+        <span class="afname k${kind}">${esc(g.zh)}</span>
+        ${QUALITY_ZH[g.quality] && !['unique', 'set'].includes(g.kind)
+          ? `<span class="afslot">${QUALITY_ZH[g.quality]}</span>` : ''}
+        ${g.slot !== g.zh ? `<span class="afslot">${esc(g.slot)}</span>` : ''}
+        ${g.base_zh && g.base_zh !== g.zh ? `<span class="afbase">${esc(g.base_zh)}</span>` : ''}
+      </div>
+      <div class="afwhere">${copiesHtml([g], { sockets: false })}</div>
+      <div class="afmods">
+        <span class="afmod${g.sockets ? ' want' : ''}">${g.sockets ? `${g.sockets} 孔` : '无孔'}</span>
+        ${g.ethereal ? '<span class="afmod eth">无形</span>' : ''}
+        ${g.ilvl ? `<span class="afmod">物品等级 ${g.ilvl}</span>` : ''}
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 /* ------------------------------------------------------------------ */
 /* Terror zones                                                        */
 /* ------------------------------------------------------------------ */
@@ -1408,7 +1488,7 @@ function renderView() {
   if (state.mode === 'tz') { $('#view').innerHTML = viewTz(); return; }
   if (state.mode === 'skills') { $('#view').innerHTML = viewSkills(); return; }
   if (state.mode === 'runes') { $('#view').innerHTML = viewCube(); return; }
-  const fn = { sets: viewSets, uniques: viewUniques, affix: viewAffix,
+  const fn = { sets: viewSets, uniques: viewUniques, affix: viewAffix, base: viewBases,
     lost: viewLost, dupes: viewDupes };
   $('#view').innerHTML = fn[state.tab]();
 }
@@ -1456,12 +1536,19 @@ $('#filters').addEventListener('click', e => {
 $('#view').addEventListener('click', e => {
   const b = e.target.closest
     ? e.target.closest('button[data-add],button[data-sub],button[data-plus],button[data-clear],' +
-      'button[data-day],button[data-affix],button[data-zone]')
+      'button[data-day],button[data-affix],button[data-base],button[data-zone]')
     : null;
   if (b && b.disabled) return;
   if (!b) return;
   const d = b.dataset;
   if (d.zone !== undefined) { state.zone = null; renderView(); return; }
+  if (d.base !== undefined) {
+    if (!d.base) state.bases = [];
+    else if (state.bases.includes(d.base)) state.bases = state.bases.filter(k => k !== d.base);
+    else state.bases = [...state.bases, d.base];
+    renderView();
+    return;
+  }
   if (d.affix !== undefined) {
     // Empty value is the "clear" button; otherwise toggle that affix.
     if (!d.affix) state.affixes = [];

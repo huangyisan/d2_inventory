@@ -339,6 +339,46 @@ print(json.dumps({"bad": bad,
   console.log(`  同时满足的戒指：${af.rings} 件`);
 }
 
+/* --- runeword bases -------------------------------------------------- */
+{
+  vm.runInContext(`globalThis.__bases = function (rep) {
+    report = rep;
+    state.mode = 'gear'; state.tab = 'base'; state.q = ''; state.slot = null;
+    const count = () => {
+      const m = viewBases().match(/符合的装备：<b>(\\d+)<\\/b>/);
+      if (!m) throw new Error('base view lost its count');
+      return Number(m[1]);
+    };
+    const wear = report.gear.filter(g => g.wearable && g.kind !== 'runeword');
+    const out = { gear: report.gear.length, wearable: wear.length };
+    state.bases = []; out.all = count();
+    state.bases = ['normal']; out.white = count();
+    state.bases = ['eth']; out.eth = count();
+    // White items carry no affixes at all — the whole reason they need their
+    // own tab rather than living under the affix filter.
+    out.whiteNoStats = wear.filter(g => g.quality === 'normal' && g.stats.length).length;
+    out.runewordsHidden = report.gear.filter(g => g.wearable && g.kind === 'runeword').length;
+    // AND again: white + already socketed.
+    state.bases = ['normal', 'socketed']; out.whiteSocketed = count();
+    out.expectWhiteSocketed = wear.filter(g => g.quality === 'normal' && g.sockets > 0).length;
+    // Contradictory picks must yield nothing, not everything.
+    state.bases = ['socketed', 'empty']; out.impossible = count();
+    state.bases = []; state.tab = 'sets';
+    return out;
+  };`, ctx);
+  const bs = ctx.__bases(report);
+  if (bs.all !== bs.wearable) { console.error('✗ 不选条件时应列出全部可穿戴装备'); ok = false; }
+  if (bs.whiteSocketed !== bs.expectWhiteSocketed) {
+    console.error(`✗ 白装+已开孔 不符：界面 ${bs.whiteSocketed}，直接算 ${bs.expectWhiteSocketed}`); ok = false;
+  }
+  if (bs.impossible !== 0) { console.error('✗ 已开孔+没开孔 竟然有结果'); ok = false; }
+  if (bs.whiteNoStats) { console.error(`✗ 有 ${bs.whiteNoStats} 件白装带词条，判定可疑`); ok = false; }
+  if (!bs.white || !bs.eth) { console.error('✗ 存档里的白装/无形没被收进来'); ok = false; }
+  console.log(`✓ 底材筛选：可用底材 ${bs.wearable} 件（排除 ${bs.runewordsHidden} 件已做成符文之语的）· ` +
+    `白装 ${bs.white} · 无形 ${bs.eth} · ` +
+    `白装且已开孔 ${bs.whiteSocketed}（与逻辑，独立复算一致）`);
+}
+
 /* --- skill planner --------------------------------------------------- */
 {
   vm.runInContext(`globalThis.__skills = function () {

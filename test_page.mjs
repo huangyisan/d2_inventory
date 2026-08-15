@@ -312,6 +312,9 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
     });
     window.showDirectoryPicker = async () => dest('');
     dirHandle = src;
+    // Changing where backups go must change only that: no files written.
+    await changeBackupDest();
+    const wroteOnRepick = Object.keys(written).length;
     await backupNow();
     delete window.showDirectoryPicker;
     dirHandle = null;
@@ -322,6 +325,7 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
       out[k.slice(i + 1)] = v;
       out['__root'] = k.slice(0, i);
     }
+    out.__wroteOnRepick = wroteOnRepick;
     return out;
   })()`, ctx);
 
@@ -338,6 +342,10 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
       console.error(`✗ 备份漏了或写错了：${name}`); ok = false;
     }
   }
+  if (bk.__wroteOnRepick !== 0) {
+    console.error('✗ 「更改备份位置」不该顺手做一次备份'); ok = false;
+  }
+  delete bk.__wroteOnRepick;
   if (Object.keys(bk).length !== Object.keys(want).length + 1) {
     console.error('✗ 备份的文件数量不对'); ok = false;
   }
@@ -346,6 +354,7 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
   }
   console.log(`✓ 备份整个文件夹：${Object.keys(want).length} 个文件原样复制到 ${bk.__root}/`);
   console.log(`  非存档文件（设置、key、子目录）也在内，目录结构保持不变`);
+  console.log('  「更改备份位置」只改位置，没有顺手写文件');
 }
 
 /* --- the backup zip must be a real, extractable archive -------------- */

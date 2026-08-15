@@ -542,7 +542,21 @@ async function showBackupDest() {
   if (dest) btn.textContent = `更改备份位置（现在是 ${dest.name}）`;
 }
 
-async function backupNow({ repick = false } = {}) {
+/* Change where backups go. Only that — it does not also run a backup. */
+async function changeBackupDest() {
+  let dest;
+  try {
+    dest = await backupDestination({ repick: true });
+  } catch (err) {
+    if (err.name === 'AbortError') { setStatus('位置没有改动。'); return; }
+    setStatus(`选备份位置失败：${esc(err.message)}`);
+    return;
+  }
+  await showBackupDest();
+  setStatus(`以后备份存到 <b>${esc(dest.name)}</b>。这次没有备份，点「备份存档」才会写入。`);
+}
+
+async function backupNow() {
   const when = new Date();
   const folder = `d2r-存档备份-${stamp(when)}`;
 
@@ -582,7 +596,7 @@ async function backupNow({ repick = false } = {}) {
   // sitting behind a wait the user cannot see the reason for.
   let dest;
   try {
-    dest = await backupDestination({ repick });
+    dest = await backupDestination();
     showBackupDest();
   } catch (err) {
     if (err.name === 'AbortError') { setStatus('已取消备份。'); return; }
@@ -716,8 +730,7 @@ $('#fallback').addEventListener('change', async e => {
 $('#pick').addEventListener('click', pickDirectory);
 $('#reload').addEventListener('click', reload);
 $('#backup').addEventListener('click', () => backupNow());
-/* Same backup, but choose the destination again first. */
-$('#rebackup').addEventListener('click', () => backupNow({ repick: true }));
+$('#rebackup').addEventListener('click', changeBackupDest);
 showBackupDest();
 
 /* Drag a folder onto the page. */

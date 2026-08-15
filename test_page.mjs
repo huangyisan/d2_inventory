@@ -278,7 +278,11 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
     const written = {};
     const file = (name, bytes) => ({
       kind: 'file', name,
-      getFile: async () => ({ arrayBuffer: async () => new Uint8Array(bytes).buffer }),
+      // Stand in for a real File: the copy hands it straight to write().
+      getFile: async () => ({
+        size: bytes.length,
+        arrayBuffer: async () => new Uint8Array(bytes).buffer,
+      }),
     });
     const dir = (name, children) => ({
       kind: 'directory', name, values: () => children[Symbol.iterator](),
@@ -298,7 +302,10 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
       getDirectoryHandle: async n => dest(prefix ? prefix + '/' + n : n),
       getFileHandle: async n => ({
         createWritable: async () => ({
-          write: async d => { written[(prefix ? prefix + '/' : '') + n] = Array.from(d); },
+          write: async d => {
+            const bytes = new Uint8Array(d.arrayBuffer ? await d.arrayBuffer() : d);
+            written[(prefix ? prefix + '/' : '') + n] = Array.from(bytes);
+          },
           close: async () => {},
         }),
       }),

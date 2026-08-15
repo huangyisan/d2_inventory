@@ -506,9 +506,15 @@ function downloadZip(files, when, folder) {
   return blob.size;
 }
 
-/* Where backups go, remembered so the second one is a single click. */
-async function backupDestination() {
-  let dest = await loadBackupDir();
+/*
+ * Where backups go, remembered so the second one is a single click.
+ *
+ * `repick` forces the chooser open again: a remembered folder is a
+ * convenience, not a commitment, and moving to a new disk should not mean
+ * clearing site data.
+ */
+async function backupDestination({ repick = false } = {}) {
+  let dest = repick ? null : await loadBackupDir();
   if (dest && dest.queryPermission) {
     let perm = await dest.queryPermission({ mode: 'readwrite' });
     if (perm !== 'granted' && dest.requestPermission) {
@@ -527,7 +533,16 @@ async function backupDestination() {
   return dest;
 }
 
-async function backupNow() {
+/* Show which folder backups land in, and offer to change it. */
+async function showBackupDest() {
+  const btn = $('#rebackup');
+  if (!btn) return;
+  const dest = window.showDirectoryPicker ? await loadBackupDir() : null;
+  btn.hidden = !dest;
+  if (dest) btn.textContent = `更改备份位置（现在是 ${dest.name}）`;
+}
+
+async function backupNow({ repick = false } = {}) {
   const when = new Date();
   const folder = `d2r-存档备份-${stamp(when)}`;
 
@@ -551,48 +566,84 @@ async function backupNow() {
   }
   if (!files.length) { setStatus('文件夹是空的，没有可备份的内容。'); return; }
 
-  const blobs = [];
-  for (const f of files) {
-    const file = await f.entry.getFile();
-    blobs.push({ name: f.name, data: new Uint8Array(await file.arrayBuffer()) });
-  }
-  const bytes = blobs.reduce((n, f) => n + f.data.length, 0);
-
+  // Browsers with no write access get the archive instead; that path does have
+  // to hold everything in memory, but a save folder is a couple of megabytes.
   if (!window.showDirectoryPicker) {
+    const blobs = [];
+    for (const f of files) {
+      blobs.push({ name: f.name, data: new Uint8Array(await (await f.entry.getFile()).arrayBuffer()) });
+    }
     const size = downloadZip(blobs, when, folder);
     setStatus(`已导出 ${esc(folder)}.zip（${blobs.length} 个文件，约 ${Math.round(size / 1024)} KB）。`);
     return;
   }
 
+  // Ask where to put it before doing any work, so the folder chooser is not
+  // sitting behind a wait the user cannot see the reason for.
   let dest;
   try {
-    dest = await backupDestination();
+    dest = await backupDestination({ repick });
+    showBackupDest();
   } catch (err) {
     if (err.name === 'AbortError') { setStatus('已取消备份。'); return; }
     setStatus(`选备份位置失败：${esc(err.message)}`);
     return;
   }
 
+  let done = 0;
+  let bytes = 0;
+  const tick = () => setStatus(`正在备份… ${done}/${files.length}`, true);
+  tick();
+
   try {
     const root = await dest.getDirectoryHandle(folder, { create: true });
-    for (const f of blobs) {
-      // Recreate subfolders; the last segment is the file itself.
-      const parts = f.name.split('/');
-      let dir = root;
-      for (const seg of parts.slice(0, -1)) {
-        dir = await dir.getDirectoryHandle(seg, { create: true });
-      }
-      const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+
+    // Subfolders are created once and shared, not re-resolved per file.
+    const dirs = new Map([['', root]]);
+    const dirFor = async prefix => {
+      if (dirs.has(prefix)) return dirs.get(prefix);
+      const cut = prefix.lastIndexOf('/');
+      const parent = await dirFor(cut < 0 ? '' : prefix.slice(0, cut));
+      const handle = await parent.getDirectoryHandle(prefix.slice(cut + 1), { create: true });
+      dirs.set(prefix, handle);
+      return handle;
+    };
+
+    const copy = async f => {
+      const cut = f.name.lastIndexOf('/');
+      const dir = await dirFor(cut < 0 ? '' : f.name.slice(0, cut));
+      const file = await f.entry.getFile();
+      const fh = await dir.getFileHandle(f.name.slice(cut + 1), { create: true });
       const w = await fh.createWritable();
-      await w.write(f.data);
+      // Hand the File straight over: no arrayBuffer copy, no second pass.
+      await w.write(file);
       await w.close();
-    }
+      bytes += file.size;
+      done++;
+      tick();
+    };
+
+    /*
+     * Copy several at a time.
+     *
+     * The cost here is not the bytes — a save folder is under 3 MB. It is that
+     * every single file costs a createWritable/close round trip, and the
+     * browser implements close() as an atomic swap-and-rename with a disk
+     * flush. That is tens of milliseconds each, and a hundred files done
+     * strictly one after another spends nearly all of its time waiting. They
+     * are independent, so run a handful concurrently and the waiting overlaps.
+     */
+    const queue = files.slice();
+    const workers = Array.from({ length: Math.min(8, queue.length) }, async () => {
+      for (let f = queue.shift(); f; f = queue.shift()) await copy(f);
+    });
+    await Promise.all(workers);
   } catch (err) {
-    setStatus(`写入备份失败：${esc(err.message)}`);
+    setStatus(`写入备份失败（已写 ${done}/${files.length}）：${esc(err.message)}`);
     return;
   }
 
-  setStatus(`已备份 ${blobs.length} 个文件（约 ${Math.round(bytes / 1024)} KB）到 ` +
+  setStatus(`已备份 ${done} 个文件（约 ${Math.round(bytes / 1024)} KB）到 ` +
     `<b>${esc(dest.name)}/${esc(folder)}</b>，原样复制，存档没有改动。`);
 }
 
@@ -664,7 +715,10 @@ $('#fallback').addEventListener('change', async e => {
 
 $('#pick').addEventListener('click', pickDirectory);
 $('#reload').addEventListener('click', reload);
-$('#backup').addEventListener('click', backupNow);
+$('#backup').addEventListener('click', () => backupNow());
+/* Same backup, but choose the destination again first. */
+$('#rebackup').addEventListener('click', () => backupNow({ repick: true }));
+showBackupDest();
 
 /* Drag a folder onto the page. */
 document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag'); });

@@ -117,9 +117,10 @@ FLAG_COMPACT = 1024
 
 
 # The playable classes, in the order the character-select screen shows them.
-# "war" (Warlock) is not base D2R — it comes with the mod this save uses; its
-# tab names have no published Chinese, so they stay neutral until someone
-# reads the real ones off the game and puts them in data/names_zh.json.
+# The Warlock ("war") arrived with the Rise of the Warlock DLC — the first new
+# class in twenty-five years — so the string tables the community publishes,
+# which stopped updating in 2021, have nothing for its thirty skills. Those
+# fall back to English until someone fills them into data/names_zh.json.
 CLASSES = [
     ("ama", "亚马逊", "Amazon", ["弓与十字弓", "被动与魔法", "标枪与长矛"]),
     ("ass", "刺客", "Assassin", ["陷阱", "暗影修炼", "武学"]),
@@ -128,7 +129,7 @@ CLASSES = [
     ("nec", "死灵法师", "Necromancer", ["诅咒", "毒素与白骨", "召唤法术"]),
     ("pal", "圣骑士", "Paladin", ["战斗技能", "攻击灵气", "防御灵气"]),
     ("sor", "女法师", "Sorceress", ["火焰", "闪电", "冰冷"]),
-    ("war", "术士", "Warlock", ["技能树一", "技能树二", "技能树三"]),
+    ("war", "术士", "Warlock", ["恶魔契约", "邪术武装", "混沌秘法"]),
 ]
 
 

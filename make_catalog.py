@@ -65,9 +65,12 @@ class Traditional2Simplified:
 class Strings:
     """D2R localized string tables, looked up by string key or English name."""
 
-    def __init__(self, path, lang="zhTW", transform=None):
+    def __init__(self, path, lang="zhTW", transform=None, overrides=None):
         self.lang = lang
         self.transform = transform or (lambda s: s)
+        # Hand-written names win outright: they exist precisely because the
+        # game data tables have no Chinese string for that item at all.
+        self.overrides = overrides or {}
         self.by_key = {}
         self.by_en = {}
         if not os.path.exists(path):
@@ -82,7 +85,13 @@ class Strings:
                 self.by_en[en] = row
 
     def get(self, key, fallback=None):
+        if key in self.overrides:
+            return self.overrides[key]
         row = self.by_key.get(key) or self.by_en.get(key)
+        if row and self.overrides:
+            manual = self.overrides.get(row.get("enUS")) or self.overrides.get(row.get("Key"))
+            if manual:
+                return manual
         if not row:
             return fallback if fallback is not None else key
         value = row.get(self.lang) or row.get("enUS") or key
@@ -107,12 +116,31 @@ FLAG_QUESTDIFF = 512
 FLAG_COMPACT = 1024
 
 
+def load_manual_names():
+    """
+    Hand-written Chinese names, for items the public string tables never got.
+
+    The newest content ships in the game client long before it reaches any of
+    the community data dumps, so those items would otherwise show their English
+    name. Anything typed into data/names_zh.json fills that gap verbatim.
+    """
+    path = os.path.join(DATA_DIR, "names_zh.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as fh:
+        raw = json.load(fh)
+    return {k: v for k, v in raw.items() if not k.startswith("_") and v}
+
+
 def main():
     gd = GameData(DATA_DIR)
     # zhTW wording (what the player's client shows), simplified glyphs.
     t2s = Traditional2Simplified(os.path.join(DATA_DIR, "t2s.json"))
-    strings = Strings(os.path.join(DATA_DIR, "strings_raw.json"), lang="zhTW", transform=t2s)
-    skill_strings = Strings(os.path.join(DATA_DIR, "strings_mod.json"), lang="zhTW", transform=t2s)
+    manual = load_manual_names()
+    strings = Strings(os.path.join(DATA_DIR, "strings_raw.json"), lang="zhTW", transform=t2s,
+                      overrides=manual)
+    skill_strings = Strings(os.path.join(DATA_DIR, "strings_mod.json"), lang="zhTW", transform=t2s,
+                            overrides=manual)
 
     class MergedStrings:
         """Item strings first, then the skill/UI bundle."""

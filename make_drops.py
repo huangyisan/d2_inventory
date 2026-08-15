@@ -20,7 +20,11 @@ small is the same as the chance of seeing one.
 
 import json
 import os
+import sys
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from make_catalog import Strings, Traditional2Simplified  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
@@ -38,25 +42,46 @@ RUNES = [f"r{i:02d}" for i in range(1, 34)]
 # clear Travincal. They are starting estimates for a geared character with
 # teleport, and the page lets you replace them, because per-hour numbers are
 # only as honest as the pace you actually run at.
-TARGETS = [
-    ("countess", "女伯爵", 1, "Countess (H)", 25, 1),
-    ("smith", "铁匠", 1, "Smith (H)", 20, 1),
-    ("andariel", "安达利尔", 1, "Andarielq (H)", 35, 1),
-    ("radament", "拉达门特", 2, "Radament (H)", 30, 1),
-    ("summoner", "召唤者", 2, "Summoner (H)", 25, 1),
-    ("duriel", "督瑞尔", 2, "Duriel (H)", 70, 1),
-    ("council", "崔凡克议会", 3, "Council (H)", 25, 12),
-    ("mephisto", "墨菲斯托", 3, "Mephisto (H)", 45, 1),
-    ("izual", "伊苏尔", 4, "Izual (H)", 35, 1),
-    ("hephasto", "锻炉守卫", 4, "Haphesto (H)", 40, 1),
-    ("diablo", "暗黑破坏神", 4, "Diablo (H)", 90, 1),
-    ("shenk", "香克", 5, "Act 5 (H) Super A", 25, 1),
-    ("pindle", "平德尔斯金", 5, "Act 5 (H) Super Cx", 15, 1),
-    ("nihlathak", "尼拉塞克", 5, "Nihlathak (H)", 35, 1),
-    ("cowking", "牛王", 5, "Cow King (H)", 90, 1),
-    ("cow", "地狱奶牛", 5, "Cow (H)", 180, 150),
-    ("baal", "巴尔", 5, "Baal (H)", 120, 1),
+# The fourth column is the game's own name for the monster, so the label is
+# whatever your client actually calls it rather than something invented here.
+# Two entries have no single string to point at — a Travincal run is a pile of
+# council members, a cow run is a field — so those keep a descriptive label.
+_RAW = [
+    ("countess", "The Countess", None, 1, "Countess (H)", 25, 1),
+    ("smith", "The Smith", None, 1, "Smith (H)", 20, 1),
+    ("andariel", "Andariel", None, 1, "Andarielq (H)", 35, 1),
+    ("radament", "Radament", None, 2, "Radament (H)", 30, 1),
+    ("summoner", "The Summoner", None, 2, "Summoner (H)", 25, 1),
+    ("duriel", "Duriel", None, 2, "Duriel (H)", 70, 1),
+    ("council", None, "崔凡克议会", 3, "Council (H)", 25, 12),
+    ("mephisto", "Mephisto", None, 3, "Mephisto (H)", 45, 1),
+    ("izual", "Izual", None, 4, "Izual (H)", 35, 1),
+    ("hephasto", "The Feature Creep", None, 4, "Haphesto (H)", 40, 1),
+    ("diablo", "Diablo", None, 4, "Diablo (H)", 90, 1),
+    ("shenk", "Siege Boss", None, 5, "Act 5 (H) Super A", 25, 1),
+    ("pindle", "Pindleskin", None, 5, "Act 5 (H) Super Cx", 15, 1),
+    ("nihlathak", None, "尼拉塞克", 5, "Nihlathak (H)", 35, 1),
+    ("cowking", "The Cow King", None, 5, "Cow King (H)", 90, 1),
+    ("cow", "Hell Bovine", None, 5, "Cow (H)", 180, 150),
+    ("baal", "Baal", None, 5, "Baal (H)", 120, 1),
 ]
+
+
+def _names():
+    """Monster names as the player's client shows them, in simplified glyphs."""
+    t2s = Traditional2Simplified(os.path.join(DATA, "t2s.json"))
+    strings = Strings(os.path.join(DATA, "strings_mod.json"), lang="zhTW", transform=t2s)
+    out = []
+    for key, string_key, manual, act, tc, secs, kills in _RAW:
+        zh = manual
+        if string_key:
+            got = strings.get(string_key, None)
+            zh = got if got and got != string_key else manual or string_key
+        out.append((key, zh, act, tc, secs, kills))
+    return out
+
+
+TARGETS = _names()
 
 
 def load_tc():

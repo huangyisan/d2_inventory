@@ -217,6 +217,7 @@ python3 make_catalog.py    # 生成内嵌用的精简目录 data/catalog.json
 python3 make_tz.py         # 下载并压缩恐怖地带排期 data/tz.json
 python3 make_drops.py      # 走掉落树算符文掉率 data/drops.json
 python3 make_itemdrops.py  # 算暗金/绿装掉率 data/itemdrops.json
+python3 make_gamble.py     # 算赌博概率与卡级窗口 data/gamble.json
 python3 make_page.py       # 打包成单文件 暗黑2存档管家.html
 ```
 
@@ -235,6 +236,7 @@ node test_page.mjs                             # 加载打包产物并核对统�
 - `make_tz.py` — 恐怖地带排期：下载上游原始表并压成 `data/tz.json`
 - `make_drops.py` — 符文掉率：走 `treasureclassex` 掉落树算出每杀期望
 - `make_itemdrops.py` — 暗金/绿装掉率：底材 → 品质骰子 → 同底材竞争
+- `make_gamble.py` — 赌博概率：固定品质骰子 + 随等级变化的同底材竞争
 - `data/names_zh.json` — 人工译名表，补公开数据表还没有的中文名
 - `props.py` — 属性码 → 中文描述的渲染器
 - `d2parse.py` — Python 参考解析器，用于交叉验证

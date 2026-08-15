@@ -836,6 +836,14 @@ function renderTop() {
 
 function renderTabs() {
   const tabs = TABS();
+  // Magic find only means anything where drop chances are shown.
+  const mfWrap = $('#mfwrap');
+  if (mfWrap) {
+    mfWrap.hidden = !(report && state.mode === 'gear' &&
+      ['uniques', 'sets', 'lost'].includes(state.tab));
+    const box = $('#mf');
+    if (box && String(box.value) !== String(state.mf)) box.value = state.mf;
+  }
   $('#tabs').innerHTML = tabs.map(([k, l]) =>
     `<button class="tab" data-tab="${k}" aria-selected="${state.tab === k}">${l}</button>`).join('');
   // The cube page has nothing to search or filter, so the whole bar goes away.
@@ -857,11 +865,6 @@ function renderFilters() {
     html += '<span class="sep"></span>';
     html += [['progress', '按进度排'], ['name', '按名称排'], ['missing', '按缺得最多排']]
       .map(([k, l]) => `<button class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
-  }
-  if (state.tab === 'uniques' || state.tab === 'sets' || state.tab === 'lost') {
-    if (html) html += '<span class="sep"></span>';
-    html += `<label class="mfbox">魔法寻找
-      <input class="pn" type="number" min="0" max="2000" value="${state.mf}" data-mf>%</label>`;
   }
   if (showSlot) {
     if (html) html += '<span class="sep"></span>';
@@ -2004,6 +2007,15 @@ function numberInput(t, commit) {
 
 $('#view').addEventListener('input', e => { numberInput(e.target, false); });
 
+/* The magic-find box sits in the toolbar, outside #view. */
+$('#mfwrap').addEventListener('input', e => { numberInput(e.target, false); });
+$('#mfwrap').addEventListener('change', e => {
+  if (numberInput(e.target, true)) renderView();
+});
+$('#mfwrap').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.blur) { e.preventDefault(); e.target.blur(); }
+});
+
 $('#view').addEventListener('change', e => {
   const t = e.target;
   if (numberInput(t, true)) { renderView(); return; }
@@ -2034,7 +2046,7 @@ loadIcons().then(m => {
 loadMF().then(n => {
   if (typeof n === 'number' && n > 0) {
     state.mf = n;
-    if (report && state.mode === 'gear') { renderFilters(); renderView(); }
+    if (report && state.mode === 'gear') { renderTabs(); renderView(); }
   }
 });
 

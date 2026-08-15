@@ -104,17 +104,32 @@ vm.runInContext(`
     out.runeCards = ($('#cards').innerHTML || '').includes('手上最高的符文');
     out.noTabs = !($('#tabs').innerHTML || '').length;
     state.mode = 'gear'; renderTop(); renderTabs();
+    // The magic-find box belongs to the pages that show drop chances, and
+    // nowhere else — it is in the sticky toolbar, so a stale one would follow
+    // you into the rune page.
+    const mfShown = {};
+    for (const tab of ['uniques', 'sets', 'affix', 'base']) {
+      state.tab = tab; renderTabs();
+      mfShown[tab] = !$('#mfwrap').hidden;
+    }
+    state.mode = 'runes'; renderTabs();
+    mfShown.runes = !$('#mfwrap').hidden;
+    state.mode = 'gear'; state.tab = 'sets'; renderTabs();
+    out.mfShown = mfShown;
     return out;
   };
 `, ctx);
 
 const sizes = ctx.__renderAll(report);
-const { runeCards, noTabs, ...tabSizes } = sizes;
+const { runeCards, noTabs, mfShown, ...tabSizes } = sizes;
 for (const [tab, len] of Object.entries(tabSizes)) {
   if (!len) { console.error(`✗ 视图 ${tab} 渲染为空`); ok = false; }
 }
 if (!runeCards) { console.error('✗ 符文模式没有换成符文的统计卡'); ok = false; }
 if (!noTabs) { console.error('✗ 符文模式不该显示装备的标签页'); ok = false; }
+const mf = sizes.mfShown;
+if (!mf.uniques || !mf.sets) { console.error('✗ 暗金/套装页应该有魔法寻找输入框'); ok = false; }
+if (mf.affix || mf.base || mf.runes) { console.error('✗ 不显示掉率的页面不该有魔法寻找输入框'); ok = false; }
 console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSizes).join('/')}) × 搜索/筛选组合渲染均无异常`);
 
 /* --- cube planner ---------------------------------------------------- */

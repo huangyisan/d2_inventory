@@ -475,6 +475,10 @@
     <div class="toolbar" id="toolbar">
       <div class="tabs" id="tabs"></div>
       <input type="search" id="q" placeholder="按物品名搜索…（中英文皆可）">
+      <!-- Lives in the sticky bar, not in the filter row: it changes every drop
+           number on the page, so it should stay in sight while you scroll. -->
+      <label class="mfbox" id="mfwrap" hidden>魔法寻找
+        <input class="pn" type="number" min="0" max="2000" value="0" id="mf" data-mf>%</label>
     </div>
     <div class="filters" id="filters"></div>
     <div id="view"></div>

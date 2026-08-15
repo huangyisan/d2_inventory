@@ -9,7 +9,7 @@ import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const html = fs.readFileSync(path.join(HERE, '暗黑2存档管家.html'), 'utf8');
+const html = fs.readFileSync(path.join(HERE, '暗黑2工具箱.html'), 'utf8');
 
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
 if (scripts.length !== 3) throw new Error(`expected 3 inline scripts, got ${scripts.length}`);

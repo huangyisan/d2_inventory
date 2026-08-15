@@ -1,8 +1,12 @@
-# 暗黑破坏神2 存档管家
+# 暗黑破坏神2 工具箱
 
-扫描 D2R 存档，做四件事：**装备收藏**（拥有哪些暗金与绿色套装、分别放在哪个小号上、
-还差哪些、哪些是可以清掉的重复件）、**符文合成**（手上的符文宝石够不够合出想要的符文）、
-**恐怖地带**（单机排期表，不联网），以及**天赋模拟**（技能加点推演）。
+D2R 的四件工具，装在一个单文件网页里：**装备收藏**（拥有哪些暗金与绿色套装、
+分别放在哪个小号上、还差哪些、哪些是可以清掉的重复件）、**符文合成**（手上的符文
+宝石够不够合出想要的符文）、**恐怖地带**（单机排期表，不联网），以及**天赋模拟**
+（技能加点推演）。前两个要读存档，后两个不用 —— 打开就能看。
+
+顺带回答两个「这东西到底多难出」的问题：暗金绿装的**掉落概率**（分 boss、带魔法寻找）
+和**赌博概率**（分等级）。
 
 职业有 8 个：原本的七个，加上「术士君临」DLC 带来的**术士**。
 
@@ -10,7 +14,7 @@
 
 ## 用法
 
-双击 `暗黑2存档管家.html`（推荐 Chrome / Edge），点「选择存档文件夹」，选中：
+双击 `暗黑2工具箱.html`（推荐 Chrome / Edge），点「选择存档文件夹」，选中：
 
 - macOS：`~/Library/Application Support/Blizzard/Diablo II Resurrected/`
 - Windows：`%USERPROFILE%\Saved Games\Diablo II Resurrected\`
@@ -219,7 +223,7 @@ python3 make_tz.py         # 下载并压缩恐怖地带排期 data/tz.json
 python3 make_drops.py      # 走掉落树算符文掉率 data/drops.json
 python3 make_itemdrops.py  # 算暗金/绿装掉率 data/itemdrops.json
 python3 make_gamble.py     # 算赌博概率与卡级窗口 data/gamble.json
-python3 make_page.py       # 打包成单文件 暗黑2存档管家.html
+python3 make_page.py       # 打包成单文件 暗黑2工具箱.html
 ```
 
 校验（浏览器解析器 vs Python 参考实现，必须逐字段一致）：

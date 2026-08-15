@@ -35,6 +35,8 @@ for src in sources:
             "sockets": it.get("sockets", 0),
             "socketedIn": it.get("socketed_in"),
             "stackCount": it.get("stack_count", 1),
+            # Rolled affixes, so the affix filter is cross-checked too.
+            "stats": [[s["id"], s["param"], s["value"]] for s in it.get("stats", [])],
         } for it in src["items"]],
     })
 

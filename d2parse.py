@@ -354,14 +354,13 @@ def read_stat_list(r, gd):
         info = gd.stat_info(stat_id)
         if info["save_bits"] == 0:
             raise ValueError(f"stat {stat_id} has no save bits")
-        if info["save_param_bits"]:
-            r.read(info["save_param_bits"])
+        param = r.read(info["save_param_bits"]) if info["save_param_bits"] else 0
         value = (r.read(info["save_bits"]) - info["save_add"]) << info["val_shift"]
-        stats.append((info["name"], value))
+        stats.append({"id": stat_id, "param": param, "value": value, "name": info["name"]})
         for paired_id in PAIRED_STATS.get(stat_id, []):
             pinfo = gd.stat_info(paired_id)
             pvalue = (r.read(pinfo["save_bits"]) - pinfo["save_add"]) << pinfo["val_shift"]
-            stats.append((pinfo["name"], pvalue))
+            stats.append({"id": paired_id, "param": 0, "value": pvalue, "name": pinfo["name"]})
     return stats
 
 
@@ -569,8 +568,10 @@ def read_item(r, gd, save_version):
             if set_mask & (1 << i):
                 read_stat_list(r, gd)
 
+    # A runeword's powers are unconditional, so they belong to the item; the
+    # set-bonus lists above are not, and stay out.
     if flags & F_RUNEWORD:
-        read_stat_list(r, gd)
+        item["stats"] += read_stat_list(r, gd)
 
     read_chronicle(r, flags, save_version)
     item["stack_count"] = read_advanced_stash(r, item["code"], save_version)

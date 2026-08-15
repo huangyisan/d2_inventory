@@ -139,18 +139,29 @@ class Catalog {
   }
 }
 
+/*
+ * Reads one stat list and returns what it actually said. The values are only
+ * needed so the page can filter by affix ("rings with faster cast rate"); the
+ * bitstream must be walked either way, so keeping the numbers is free.
+ *
+ * `add` is the table's storage offset: resistances are stored biased so that a
+ * negative value fits an unsigned field, so it has to come back off here.
+ */
 function readStatList(r, cat) {
+  const out = [];
   for (;;) {
     const statId = r.read(9);
     if (statId === STAT_TERMINATOR) break;
     const info = cat.stat(statId);
     if (!info.bits) throw new Error(`属性 ${statId} 缺少位宽定义`);
-    if (info.paramBits) r.read(info.paramBits);
-    r.read(info.bits);
+    const param = info.paramBits ? r.read(info.paramBits) : 0;
+    out.push({ id: statId, param, value: (r.read(info.bits) - (info.add || 0)) << (info.shift || 0) });
     for (const pid of (PAIRED_STATS[statId] || [])) {
-      r.read(cat.stat(pid).bits);
+      const sub = cat.stat(pid);
+      out.push({ id: pid, param: 0, value: (r.read(sub.bits) - (sub.add || 0)) << (sub.shift || 0) });
     }
   }
+  return out;
 }
 
 function readRealmData(r, saveVersion) {
@@ -229,6 +240,7 @@ function readItem(r, cat, saveVersion) {
     personalized: !!(flags & F_PERSONALIZED),
     compact, quality: 'normal', uniqueId: null, setId: null, stackCount: 1,
     itemLevel: null, sockets: 0, code: null, baseName: null, slot: '其他',
+    stats: [],
   };
 
   let base = null;
@@ -343,12 +355,16 @@ function readItem(r, cat, saveVersion) {
   let setMask = 0;
   if (q === 5) setMask = r.read(5);
 
-  readStatList(r, cat);
+  // The item's own affixes. The set-bonus lists that follow are conditional on
+  // wearing the rest of the set, and are deliberately not merged in: filtering
+  // must answer "what does this item give me", not "what could it give me".
+  item.stats = readStatList(r, cat);
 
   if (q === 5) {
     for (let i = 0; i < 5; i++) if (setMask & (1 << i)) readStatList(r, cat);
   }
-  if (flags & F_RUNEWORD) readStatList(r, cat);
+  // A runeword's powers are unconditional, so they do count.
+  if (flags & F_RUNEWORD) item.stats = item.stats.concat(readStatList(r, cat));
 
   readChronicle(r, flags, saveVersion);
   item.stackCount = readAdvancedStash(r, item.code, saveVersion);

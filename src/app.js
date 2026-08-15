@@ -15,11 +15,13 @@ let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
-  target: null, qty: 1, day: 0, affixes: [], zone: null };
+  target: null, qty: 1, day: 0, affixes: [], zone: null,
+  skClass: 'sor', skLevel: 99, skQuests: true, skPts: {} };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 // day: which day the terror-zone list is showing, 0 = today.
 // affixes: the affix keys that must ALL be present, the filter's AND list.
 // zone: index into the terror-zone table when following one zone, else null.
+// sk*: the skill planner's class, character level, quest bonus and spent points.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -154,6 +156,15 @@ function idb(mode, fn) {
 }
 const saveHandle = h => idb('readwrite', s => s.put(h, 'dir')).catch(() => {});
 const loadHandle = () => idb('readonly', s => s.get('dir')).catch(() => null);
+/*
+ * Skill icons are the one thing this page cannot ship: they are the game's own
+ * art. So the player points it at a folder ripped from their own install and
+ * the images are kept here, on their machine — never uploaded, never part of
+ * the bundle. Stored as data URLs so they survive a refresh without asking for
+ * folder permission again.
+ */
+const saveIcons = m => idb('readwrite', s => s.put(m, 'icons')).catch(() => {});
+const loadIcons = () => idb('readonly', s => s.get('icons')).catch(() => null);
 
 /* ------------------------------------------------------------------ */
 /* Reading the folder                                                  */
@@ -540,7 +551,7 @@ document.addEventListener('drop', async e => {
 /* ------------------------------------------------------------------ */
 // Three things this tool does, kept apart: collecting gear, cubing runes, and
 // telling you where the terror zone is. Only the first two need a save file.
-const MODES = [['gear', '装备收藏'], ['runes', '符文合成'], ['tz', '恐怖地带']];
+const MODES = [['gear', '装备收藏'], ['runes', '符文合成'], ['tz', '恐怖地带'], ['skills', '天赋模拟']];
 const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['affix', '词条筛选'],
   ['lost', '找回清单'], ['dupes', '重复清理']];
 // The chronicle tab only exists in D2R saves that have one.
@@ -700,7 +711,7 @@ function renderModes() {
 
 function renderTop() {
   // The terror-zone page stands alone: no save, so no summary cards.
-  if (state.mode === 'tz' || !report) {
+  if (state.mode === 'tz' || state.mode === 'skills' || !report) {
     $('#cards').innerHTML = '';
     $('#warnings').innerHTML = '';
     return;
@@ -1395,6 +1406,7 @@ function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
   if (state.mode === 'tz') { $('#view').innerHTML = viewTz(); return; }
+  if (state.mode === 'skills') { $('#view').innerHTML = viewSkills(); return; }
   if (state.mode === 'runes') { $('#view').innerHTML = viewCube(); return; }
   const fn = { sets: viewSets, uniques: viewUniques, affix: viewAffix,
     lost: viewLost, dupes: viewDupes };
@@ -1404,7 +1416,7 @@ function renderView() {
 function render() {
   // Terror zones need no save file, so that page can show before anything is
   // loaded; the other two keep the "how to use" panel up until there is one.
-  const standalone = state.mode === 'tz';
+  const standalone = state.mode === 'tz' || state.mode === 'skills';
   $('#modes').hidden = false;
   $('#intro').hidden = !!report || standalone;
   $('#main').hidden = !report && !standalone;
@@ -1532,3 +1544,208 @@ setInterval(() => {
     setStatus('上次的存档文件夹已记住，点「重新读取」授权后即可载入。');
   }
 })();
+
+/* ------------------------------------------------------------------ */
+/* Skill icons (from the player's own game files)                      */
+/* ------------------------------------------------------------------ */
+let SKILL_ICONS = {};
+
+// "Fire Bolt.png", "fire_bolt.PNG" and "firebolt.webp" all mean the same file.
+const iconKey = name => name.toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]/g, '');
+
+async function pickIcons() {
+  if (!window.showDirectoryPicker) {
+    setStatus('这个浏览器不支持直接选文件夹，图标载入用 Chrome / Edge。');
+    return;
+  }
+  let dir;
+  try {
+    dir = await window.showDirectoryPicker({ mode: 'read' });
+  } catch { return; }
+  const map = {};
+  let n = 0, skipped = 0;
+  for await (const [name, handle] of dir.entries()) {
+    if (handle.kind !== 'file' || !/\.(png|gif|jpe?g|webp)$/i.test(name)) continue;
+    const file = await handle.getFile();
+    // A skill icon is a few KB; anything huge is not one, and would bloat the
+    // browser database for nothing.
+    if (file.size > 512 * 1024) { skipped++; continue; }
+    map[iconKey(name)] = await new Promise(res => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result);
+      fr.onerror = () => res(null);
+      fr.readAsDataURL(file);
+    });
+    n++;
+  }
+  for (const k of Object.keys(map)) if (!map[k]) delete map[k];
+  SKILL_ICONS = map;
+  await saveIcons(map);
+  setStatus(`已载入 ${n} 个技能图标${skipped ? `（跳过 ${skipped} 个过大的文件）` : ''}，只存在你本机。`);
+  renderView();
+}
+
+/* ------------------------------------------------------------------ */
+/* Skill planner                                                       */
+/* ------------------------------------------------------------------ */
+/*
+ * A skill tree you can spend points in, laid out on the game's own grid: three
+ * pages of six rows by three columns, positions straight out of skilldesc.
+ *
+ * The rules enforced are the game's: twenty points a skill, a skill needs your
+ * character level to have reached its requirement, and every prerequisite needs
+ * at least one point in it. Taking a point back is refused when something else
+ * is standing on it — otherwise you could build a tree the game would not let
+ * you keep.
+ */
+const CLASSES = CATALOG.classes || [];
+const CLASS_BY_CODE = new Map(CLASSES.map(c => [c.code, c]));
+
+// Levels 2..99 are one point each; the three Act quests hand out four more apiece.
+const QUEST_POINTS = 12;
+const skillBudget = () => (state.skLevel - 1) + (state.skQuests ? QUEST_POINTS : 0);
+
+const skClass = () => CLASS_BY_CODE.get(state.skClass) || CLASSES[0];
+const skPut = id => state.skPts[id] || 0;
+const skSpent = () => Object.values(state.skPts).reduce((n, v) => n + v, 0);
+
+/* Why a skill cannot take another point right now, or null when it can. */
+function skBlocked(sk) {
+  if (skPut(sk.id) >= sk.max) return `最多 ${sk.max} 级`;
+  if (state.skLevel < sk.req) return `需要角色 ${sk.req} 级`;
+  const cls = skClass();
+  for (const pid of sk.pre) {
+    if (skPut(pid) < 1) {
+      const p = cls.skills.find(x => x.id === pid);
+      return `需要先点 ${p ? p.zh : pid}`;
+    }
+  }
+  if (skSpent() >= skillBudget()) return '技能点用完了';
+  return null;
+}
+
+/* Removing a point is refused while something else is standing on this skill. */
+function skDependent(sk) {
+  if (skPut(sk.id) !== 1) return null;
+  const cls = skClass();
+  const on = cls.skills.find(x => skPut(x.id) > 0 && x.pre.includes(sk.id));
+  return on ? on.zh : null;
+}
+
+function skAdd(id, delta) {
+  const cls = skClass();
+  const sk = cls.skills.find(x => x.id === id);
+  if (!sk) return;
+  if (delta > 0) {
+    if (!skBlocked(sk)) state.skPts[id] = skPut(id) + 1;
+  } else if (skPut(id) > 0 && !skDependent(sk)) {
+    state.skPts[id] = skPut(id) - 1;
+    if (!state.skPts[id]) delete state.skPts[id];
+  }
+}
+
+function skTile(sk) {
+  const n = skPut(sk.id);
+  const blocked = skBlocked(sk);
+  const locked = state.skLevel < sk.req || sk.pre.some(p => skPut(p) < 1);
+  const cls = ['sk', n ? 'on' : '', locked ? 'locked' : ''].filter(Boolean).join(' ');
+  const icon = SKILL_ICONS[iconKey(sk.icon)] || SKILL_ICONS[iconKey(sk.en)];
+  return `<button class="${cls}" data-sk="${sk.id}"
+      style="grid-row:${sk.row};grid-column:${sk.col}"
+      title="${esc(sk.zh)} · ${esc(sk.en)}\n需要角色 ${sk.req} 级${
+        sk.pre.length ? '\n前置：' + sk.pre.map(p => {
+          const q = skClass().skills.find(x => x.id === p);
+          return q ? q.zh : p;
+        }).join('、') : ''}${blocked ? '\n' + blocked : ''}">
+    <span class="ic"${icon ? ` style="background-image:url(${icon})"` : ''}>${
+      icon ? '' : esc(sk.zh.slice(0, 2))}</span>
+    <span class="nm">${esc(sk.zh)}</span>
+    <span class="lv">${n}<span class="mx">/${sk.max}</span></span>
+  </button>`;
+}
+
+function viewSkills() {
+  const cls = skClass();
+  const spent = skSpent();
+  const budget = skillBudget();
+
+  let html = `<div class="skbar">
+    <div class="skclasses">${CLASSES.map(c =>
+      `<button class="chip" data-skcls="${c.code}" aria-pressed="${c.code === cls.code}">${esc(c.zh)}</button>`).join('')}</div>
+    <div class="skctl">
+      <label>角色等级
+        <input type="number" id="sklevel" class="sknum" min="1" max="99" value="${state.skLevel}" data-sklevel></label>
+      <label class="skq"><input type="checkbox" data-skquest${state.skQuests ? ' checked' : ''}> 算上三个任务奖励（+12）</label>
+      <span class="skpts ${spent > budget ? 'over' : ''}">已用 <b>${spent}</b> / ${budget} 点</span>
+      <button class="btn small" data-skreset="1"${spent ? '' : ' disabled'}>清空</button>
+      <button class="btn small" data-skicons="1">${
+        Object.keys(SKILL_ICONS).length ? `图标已载入 ${Object.keys(SKILL_ICONS).length} 个` : '载入图标文件夹'}</button>
+    </div>
+  </div>`;
+
+  html += '<div class="sktrees">';
+  for (let page = 1; page <= 3; page++) {
+    const inPage = cls.skills.filter(s => s.page === page);
+    const used = inPage.reduce((n, s) => n + skPut(s.id), 0);
+    html += `<div class="sktree">
+      <h3>${esc(cls.tabs[page - 1] || `技能树${page}`)} <span class="thin">${used} 点</span></h3>
+      <div class="skgrid">${inPage.map(skTile).join('')}</div>
+    </div>`;
+  }
+  html += '</div>';
+
+  html += `<p class="hint" style="margin-top:16px">
+    左键加一点，右键（或按住 Alt 点）减一点。等级不够、前置没点的技能是灰的，点不动。<br>
+    ${Object.keys(SKILL_ICONS).length ? '' :
+      '图标要和游戏一样的话，点「载入图标文件夹」选一个装着技能图标的目录 —— ' +
+      '图标只留在你这台机器上，不会上传、也不在这个页面里。'}</p>`;
+  return html;
+}
+
+/* Skill planner controls. */
+$('#view').addEventListener('click', e => {
+  const t = e.target.closest ? e.target.closest('[data-sk],[data-skcls],[data-skreset],[data-skicons]') : null;
+  if (!t || t.disabled) return;
+  const d = t.dataset;
+  if (d.skcls) { state.skClass = d.skcls; state.skPts = {}; renderView(); return; }
+  if (d.skreset) { state.skPts = {}; renderView(); return; }
+  if (d.skicons) { pickIcons(); return; }
+  if (d.sk) {
+    // Alt-click takes a point back, same as the right button.
+    skAdd(Number(d.sk), e.altKey ? -1 : 1);
+    renderView();
+  }
+});
+
+$('#view').addEventListener('contextmenu', e => {
+  const t = e.target.closest ? e.target.closest('[data-sk]') : null;
+  if (!t) return;
+  e.preventDefault();
+  skAdd(Number(t.dataset.sk), -1);
+  renderView();
+});
+
+$('#view').addEventListener('input', e => {
+  const t = e.target;
+  if (!t || !t.dataset) return;
+  if (t.dataset.sklevel !== undefined) {
+    state.skLevel = Math.min(99, Math.max(1, Number(t.value) || 1));
+    renderView();
+  }
+});
+
+$('#view').addEventListener('change', e => {
+  const t = e.target;
+  if (t && t.dataset && t.dataset.skquest !== undefined) {
+    state.skQuests = !!t.checked;
+    renderView();
+  }
+});
+
+/* Icons picked in an earlier session are still on this machine. */
+loadIcons().then(m => {
+  if (m && Object.keys(m).length) {
+    SKILL_ICONS = m;
+    if (state.mode === 'skills') renderView();
+  }
+});

@@ -185,6 +185,48 @@
   .tooltip .ttier.on .tprop { color: var(--green); }
   .tooltip .ttier.on .tlabel { color: var(--green); }
   /* Cube planner: stock on the left, the list and the answer on the right */
+  /* ---- Skill planner ---- */
+  .skbar { border: 1px solid var(--line); background: var(--panel); border-radius: 10px;
+           padding: 12px 14px; margin: 16px 0 14px; }
+  .skclasses { display: flex; flex-wrap: wrap; gap: 6px; }
+  .skctl { display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+           margin-top: 11px; font-size: 13.5px; color: var(--muted); }
+  .skctl label { display: inline-flex; align-items: center; gap: 6px; }
+  .sknum { font: inherit; font-size: 13.5px; width: 4.5em; padding: 4px 8px; border-radius: 7px;
+           border: 1px solid var(--line); background: var(--bg); color: var(--ink); }
+  .skpts { color: var(--ink); }
+  .skpts b { color: var(--gold); font-size: 15px; }
+  .skpts.over b { color: var(--bad); }
+
+  /* Three trees side by side; the game shows one at a time, but the whole
+     build is the thing you are looking at here. */
+  .sktrees { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+  @media (max-width: 900px) { .sktrees { grid-template-columns: 1fr; } }
+  .sktree { border: 1px solid var(--line); background: var(--panel);
+            border-radius: 10px; padding: 10px 11px; }
+  .sktree h3 { margin: 0 0 9px; font-size: 14px; }
+  .sktree h3 .thin { font-weight: 400; color: var(--muted); font-size: 12px; }
+  /* The game's own grid: six rows, three columns, positions from skilldesc. */
+  .skgrid { display: grid; grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(6, auto); gap: 5px; }
+  .sk { display: flex; flex-direction: column; align-items: center; gap: 2px;
+        font: inherit; cursor: pointer; padding: 5px 2px 4px; overflow: hidden;
+        background: var(--bg); color: var(--ink);
+        border: 1px solid var(--line); border-radius: 8px; }
+  .sk:hover { border-color: var(--gold); }
+  .sk .ic { width: 30px; height: 30px; border-radius: 6px; display: flex;
+            align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+            color: var(--muted); background: var(--panel) center/cover no-repeat;
+            border: 1px solid var(--line); }
+  .sk .nm { font-size: 10.5px; line-height: 1.25; text-align: center; }
+  .sk .lv { font-size: 12px; font-weight: 700; line-height: 1.2; }
+  .sk .mx { font-weight: 400; font-size: 10px; color: var(--muted); }
+  .sk.on { border-color: var(--gold); background: var(--gold-bg); }
+  .sk.on .lv { color: var(--gold); }
+  /* Level or prerequisite not met: the game greys these out, so do we. */
+  .sk.locked { opacity: .45; }
+  .sk.locked:hover { border-color: var(--line); }
+
   /* ---- Affix filter ---- */
   .afbar { border: 1px solid var(--line); background: var(--panel);
            border-radius: 10px; padding: 12px 14px; margin: 14px 0 12px; }

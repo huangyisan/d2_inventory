@@ -116,6 +116,68 @@ FLAG_QUESTDIFF = 512
 FLAG_COMPACT = 1024
 
 
+# The playable classes, in the order the character-select screen shows them.
+# "war" (Warlock) is not base D2R — it comes with the mod this save uses; its
+# tab names have no published Chinese, so they stay neutral until someone
+# reads the real ones off the game and puts them in data/names_zh.json.
+CLASSES = [
+    ("ama", "亚马逊", "Amazon", ["弓与十字弓", "被动与魔法", "标枪与长矛"]),
+    ("ass", "刺客", "Assassin", ["陷阱", "暗影修炼", "武学"]),
+    ("bar", "野蛮人", "Barbarian", ["战斗技巧", "战斗专精", "战吼"]),
+    ("dru", "德鲁伊", "Druid", ["元素召唤", "变身", "元素"]),
+    ("nec", "死灵法师", "Necromancer", ["诅咒", "毒素与白骨", "召唤法术"]),
+    ("pal", "圣骑士", "Paladin", ["战斗技能", "攻击灵气", "防御灵气"]),
+    ("sor", "女法师", "Sorceress", ["火焰", "闪电", "冰冷"]),
+    ("war", "术士", "Warlock", ["技能树一", "技能树二", "技能树三"]),
+]
+
+
+def build_classes(data_dir, strings, manual):
+    """
+    The skill trees, laid out the way the game lays them out.
+
+    Every class skill carries a page (1-3), a row (1-6) and a column (1-3) in
+    skilldesc.txt, which is exactly the grid the in-game tree draws, so the
+    simulator can reproduce the real layout instead of inventing one.
+    """
+    with open(os.path.join(data_dir, "skills.json"), encoding="utf-8") as fh:
+        skills = json.load(fh)
+    with open(os.path.join(data_dir, "skilldesc.json"), encoding="utf-8") as fh:
+        descs = json.load(fh)
+    by_desc = {d["skilldesc"]: d for d in descs.values() if d.get("skilldesc")}
+
+    # Prerequisites name other skills in English; resolve them to ids at build
+    # time so the page never has to search by name.
+    id_of = {r["skill"]: r["*Id"] for r in skills.values() if r.get("skill")}
+
+    out = []
+    for code, zh, en, tabs in CLASSES:
+        rows = []
+        for r in skills.values():
+            if r.get("charclass") != code:
+                continue
+            d = by_desc.get(r.get("skilldesc"))
+            if not d or not d.get("SkillPage"):
+                continue
+            name = r["skill"]
+            key = d.get("str name")
+            label = manual.get(name) or (strings.get(key, name) if key else name)
+            pre = [id_of[r[f"reqskill{i}"]] for i in (1, 2, 3)
+                   if r.get(f"reqskill{i}") in id_of]
+            rows.append({
+                "id": r["*Id"], "en": name, "zh": label,
+                "page": d["SkillPage"], "row": d["SkillRow"], "col": d["SkillColumn"],
+                "req": r.get("reqlevel", 1), "max": r.get("maxlvl", 20),
+                "pre": pre,
+                # Filename stem to look for when the player points the page at a
+                # folder of icons ripped from their own game.
+                "icon": r.get("skilldesc", name).lower(),
+            })
+        rows.sort(key=lambda s: (s["page"], s["row"], s["col"]))
+        out.append({"code": code, "zh": zh, "en": en, "tabs": tabs, "skills": rows})
+    return out
+
+
 def load_manual_names():
     """
     Hand-written Chinese names, for items the public string tables never got.
@@ -258,10 +320,13 @@ def main():
             continue
         runewords[rid] = [en, strings.get(key, en)]
 
+    classes = build_classes(DATA_DIR, MergedStrings(), manual)
+
     catalog = {
         "bases": bases,
         "stats": stats,
         "runewords": runewords,
+        "classes": classes,
         "uniques": sorted(uniques.values(), key=lambda e: e["name"]),
         "sets": sorted(sets.values(), key=lambda g: g["name"]),
     }
@@ -274,6 +339,9 @@ def main():
     print(f"runewords={len(runewords)}")
     if props.unmapped:
         print(f"未映射属性码 ({len(props.unmapped)}): {sorted(props.unmapped)}")
+    print(f"技能: {len(classes)} 个职业 / "
+          f"{sum(len(c['skills']) for c in classes)} 个技能 · "
+          f"未翻译 {sum(1 for c in classes for k in c['skills'] if k['zh'] == k['en'])} 个")
     print(f"bases={len(bases)} stats={len(stats)} "
           f"uniques={len(catalog['uniques'])} sets={len(catalog['sets'])} "
           f"pieces={sum(len(g['pieces']) for g in catalog['sets'])}")

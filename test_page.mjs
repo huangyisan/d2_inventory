@@ -339,6 +339,80 @@ print(json.dumps({"bad": bad,
   console.log(`  同时满足的戒指：${af.rings} 件`);
 }
 
+/* --- skill planner --------------------------------------------------- */
+{
+  vm.runInContext(`globalThis.__skills = function () {
+    state.mode = 'skills';
+    const out = { classes: CLASSES.length, perClass: {}, renders: 0 };
+    for (const c of CLASSES) {
+      state.skClass = c.code; state.skLevel = 99; state.skPts = {};
+      out.perClass[c.code] = c.skills.length;
+      // The game's grid: three pages, six rows, three columns, no two skills
+      // sharing a cell.
+      const cells = new Set();
+      for (const k of c.skills) {
+        if (k.page < 1 || k.page > 3 || k.row < 1 || k.row > 6 || k.col < 1 || k.col > 3) {
+          throw new Error('bad grid position: ' + c.code + ' ' + k.en);
+        }
+        const cell = k.page + ':' + k.row + ':' + k.col;
+        if (cells.has(cell)) throw new Error('two skills in one cell: ' + c.code + ' ' + cell);
+        cells.add(cell);
+      }
+      if (!viewSkills().length) throw new Error('empty tree ' + c.code);
+      out.renders++;
+    }
+
+    // Sorceress: Meteor needs Fire Ball and Fire Wall, each of which needs
+    // Fire Bolt / Inferno below them. Walk that chain.
+    state.skClass = 'sor'; state.skLevel = 99; state.skPts = {};
+    const sor = CLASSES.find(c => c.code === 'sor');
+    const at = n => sor.skills.find(k => k.en === n);
+    const meteor = at('Meteor'), ball = at('Fire Ball'), wall = at('Fire Wall');
+    out.meteorBlocked = !!skBlocked(meteor);
+    skAdd(meteor.id, 1);
+    out.meteorRefused = !state.skPts[meteor.id];
+    for (const n of ['Fire Bolt', 'Fire Ball', 'Inferno', 'Blaze', 'Fire Wall']) skAdd(at(n).id, 1);
+    out.meteorNowFree = !skBlocked(meteor);
+    skAdd(meteor.id, 1);
+    out.meteorTaken = state.skPts[meteor.id] === 1;
+    // Its prerequisite is now load-bearing and cannot be taken back.
+    out.wallLocked = skDependent(wall);
+    skAdd(wall.id, -1);
+    out.wallStillThere = state.skPts[wall.id] === 1;
+
+    // Level gates: at level 1 nothing above the first row is reachable.
+    state.skPts = {}; state.skLevel = 1;
+    out.lowLevelBlocked = !!skBlocked(meteor);
+    out.budgetAt1 = skillBudget();
+
+    // The budget is a hard ceiling.
+    state.skLevel = 2; state.skQuests = false; state.skPts = {};
+    const bolt = at('Fire Bolt');
+    skAdd(bolt.id, 1); skAdd(bolt.id, 1);
+    out.budgetAt2 = skillBudget();
+    out.spentAt2 = skSpent();
+
+    state.skPts = {}; state.skLevel = 99; state.skQuests = true; state.skClass = 'sor';
+    return out;
+  };`, ctx);
+  const sk = ctx.__skills();
+
+  if (sk.classes !== 8) { console.error(`✗ 职业数 ${sk.classes}，应为 8`); ok = false; }
+  for (const [c, n] of Object.entries(sk.perClass)) {
+    if (n !== 30) { console.error(`✗ ${c} 有 ${n} 个技能，应为 30`); ok = false; }
+  }
+  if (!sk.meteorBlocked || !sk.meteorRefused) { console.error('✗ 前置没点就能点陨石'); ok = false; }
+  if (!sk.meteorNowFree || !sk.meteorTaken) { console.error('✗ 前置齐了反而点不了陨石'); ok = false; }
+  if (!sk.wallLocked || !sk.wallStillThere) { console.error('✗ 被依赖的前置竟然能撤点'); ok = false; }
+  if (!sk.lowLevelBlocked) { console.error('✗ 1 级就能点高级技能'); ok = false; }
+  if (sk.budgetAt1 !== 12) { console.error(`✗ 1 级技能点应为 12（任务奖励），实际 ${sk.budgetAt1}`); ok = false; }
+  if (sk.budgetAt2 !== 1 || sk.spentAt2 !== 1) {
+    console.error(`✗ 技能点上限没兜住：预算 ${sk.budgetAt2}，花掉 ${sk.spentAt2}`); ok = false;
+  }
+  console.log(`✓ 天赋模拟：${sk.classes} 个职业 × 30 技能，格子无重叠 · ` +
+    `等级/前置/点数上限都拦得住 · 被依赖的前置撤不掉`);
+}
+
 /* --- terror zones ---------------------------------------------------- */
 {
   const tz = vm.runInContext(`(function () {

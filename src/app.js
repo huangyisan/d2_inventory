@@ -1286,7 +1286,9 @@ function viewTz() {
   const ends = TZ_START + (cur + 1) * TZ_STEP;
   const countdown = `<b class="tzleft" id="tzleft" data-ends="${ends}">${mmss(ends - now)}</b>`;
 
-  let html = '';
+  // Everything on this page shares one width box, so the calendar's right edge
+  // lands exactly under the zone picker's rather than running off across the page.
+  let html = '<div class="tzwrap">';
 
   // Zone picker. Sorted by act then name, so it reads like the waypoint list.
   const order = TZ.zones.map((z, i) => [z, i])
@@ -1379,6 +1381,8 @@ function viewTz() {
     }
     html += '</div>';
   }
+
+  html += '</div>';
 
   const daysLeft = Math.floor((TZ_END - now) / 86400000);
   html += `<p class="hint" style="margin-top:18px">

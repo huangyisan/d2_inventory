@@ -61,6 +61,8 @@
   button.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   button.btn:disabled { opacity: .45; cursor: default; }
   .hint { color: var(--muted); font-size: 12.5px; }
+  button.btn.small { padding: 4px 10px; font-size: 13px; }
+  button.btn:disabled { opacity: .4; cursor: default; }
 
   .intro { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
            padding: 22px 24px; margin-top: 20px; }
@@ -183,6 +185,76 @@
   .tooltip .ttier.on .tprop { color: var(--green); }
   .tooltip .ttier.on .tlabel { color: var(--green); }
   /* Cube planner: stock on the left, the list and the answer on the right */
+  /* ---- Affix filter ---- */
+  .afbar { border: 1px solid var(--line); background: var(--panel);
+           border-radius: 10px; padding: 12px 14px; margin: 14px 0 12px; }
+  .aftitle { font-size: 13.5px; margin-bottom: 9px; }
+  .aftitle b { color: var(--gold); }
+  .aftitle .thin { color: var(--muted); }
+  .afchips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip.clr { margin-left: 8px; }
+  .afcount { font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+  .afcount b { color: var(--ink); }
+  .aflist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  @media (max-width: 900px) { .aflist { grid-template-columns: 1fr; } }
+  .afitem { border: 1px solid var(--line); background: var(--panel);
+            border-radius: 10px; padding: 10px 12px; }
+  .afhead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+  .afname { font-weight: 600; font-size: 14.5px; }
+  /* Item colours as the game shows them. */
+  .afname.ku { color: var(--gold); }
+  .afname.ks { color: var(--green); }
+  .afname.kw { color: var(--dupe); }
+  .afname.kr { color: #b8a12a; }
+  .afname.kc { color: var(--dupe); }
+  .afname.km { color: var(--use); }
+  .afslot { font-size: 11.5px; color: var(--muted); border: 1px solid var(--line);
+            border-radius: 999px; padding: 1px 7px; }
+  .afbase { font-size: 12px; color: var(--muted); }
+  .afwhere { font-size: 12.5px; color: var(--muted); margin: 4px 0 7px; }
+  .afmods { display: flex; flex-wrap: wrap; gap: 5px; }
+  .afmod { font-size: 12px; padding: 1px 7px; border-radius: 999px;
+           border: 1px solid var(--line); color: var(--muted); }
+  /* The ones you actually asked for, so the match is obvious. */
+  .afmod.want { border-color: var(--gold); background: var(--gold-bg); color: var(--gold); font-weight: 600; }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 20px 2px; }
+
+  /* ---- Terror zones ---- */
+  /* The zone you are in right now, big enough to read from across the room. */
+  .tznow { border: 1px solid var(--gold); background: var(--gold-bg); border-radius: 12px;
+           padding: 16px 20px; margin: 16px 0 6px; }
+  .tznow .lbl { font-size: 12px; color: var(--muted); letter-spacing: .5px; }
+  .tznow .z { font-size: 26px; font-weight: 700; color: var(--gold); line-height: 1.3; margin: 2px 0 4px; }
+  .tznow .en { font-size: 12.5px; color: var(--muted); }
+  .tznow .meta { margin-top: 10px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+  .tznow .left { font-weight: 600; }
+  .tznext { font-size: 13.5px; color: var(--muted); margin: 0 0 18px; }
+  .tznext b { color: var(--ink); font-weight: 600; }
+
+  .tzday { display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; }
+  .tzday h3 { margin: 0; font-size: 15px; }
+  .tzday .thin { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+  .tzday .sp { flex: 1; }
+
+  .tzlist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 3px 20px; }
+  @media (max-width: 760px) { .tzlist { grid-template-columns: 1fr; } }
+  .tzrow { display: flex; align-items: baseline; gap: 10px; padding: 4px 8px;
+           border-radius: 7px; border: 1px solid transparent; font-size: 13.5px; }
+  .tzrow .t { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+              color: var(--muted); white-space: nowrap; }
+  .tzrow .z { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tzrow.past { color: var(--dim); }
+  .tzrow.past .t { color: var(--dim); }
+  .tzrow.now { border-color: var(--gold); background: var(--gold-bg); font-weight: 600; }
+  .tzrow.now .t, .tzrow.now .z { color: var(--gold); }
+  /* Worth a detour: all-round, experience, loot. */
+  .tzt { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+         border: 1px solid currentColor; font-weight: 600; }
+  .tzt.boss { color: var(--dupe); }
+  .tzt.exp  { color: var(--green); }
+  .tzt.loot { color: var(--gold); }
+  .tzrow.past .tzt { opacity: .45; }
+
   .cube { display: grid; grid-template-columns: 286px 1fr; gap: 22px; align-items: start; }
   @media (max-width: 860px) { .cube { grid-template-columns: 1fr; } }
   .cubeleft { position: sticky; top: 58px; max-height: calc(100vh - 80px); overflow-y: auto;
@@ -282,6 +354,10 @@
     </div>
   </header>
 
+  <!-- Outside #main: the terror-zone calendar needs no save file, so the mode
+       bar has to be reachable before anything is loaded. -->
+  <div class="modes" id="modes" hidden></div>
+
   <div class="intro" id="intro">
     <h2>怎么用</h2>
     <ol>
@@ -301,7 +377,6 @@
   </div>
 
   <div id="main" hidden>
-    <div class="modes" id="modes"></div>
     <div class="cards" id="cards"></div>
     <div id="warnings"></div>
     <div class="toolbar" id="toolbar">
@@ -322,6 +397,7 @@
 
 <script>
 const CATALOG = __CATALOG__;
+const TZ = __TZ__;
 </script>
 <script>
 __PARSER__

@@ -58,13 +58,24 @@ def version():
     return sha + ("+" if dirty else "")
 
 
+def tz_end(tzd):
+    """When the baked-in terror-zone calendar runs out."""
+    start = datetime.datetime.strptime(tzd["start"], "%Y-%m-%dT%H:%M:%SZ")
+    return (start + datetime.timedelta(seconds=tzd["step"] * len(tzd["slots"]))).strftime("%Y-%m-%d")
+
+
 def main():
     catalog_path = os.path.join(DATA_DIR, "catalog.json")
     if not os.path.exists(catalog_path):
         subprocess.check_call([sys.executable, os.path.join(HERE, "make_catalog.py")])
+    tz_path = os.path.join(DATA_DIR, "tz.json")
+    if not os.path.exists(tz_path):
+        subprocess.check_call([sys.executable, os.path.join(HERE, "make_tz.py")])
 
     with open(catalog_path, encoding="utf-8") as fh:
         catalog = fh.read()
+    with open(tz_path, encoding="utf-8") as fh:
+        tz = fh.read()
     with open(os.path.join(SRC, "parser.js"), encoding="utf-8") as fh:
         parser = strip_modules(fh.read())
     with open(os.path.join(SRC, "app.js"), encoding="utf-8") as fh:
@@ -74,12 +85,14 @@ def main():
 
     # Guard against an early </script> closing the inline block.
     catalog = catalog.replace("</", "<\\/")
+    tz = tz.replace("</", "<\\/")
 
     built = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     html = (page
             .replace("__VERSION__", version())
             .replace("__BUILT__", built)
             .replace("__CATALOG__", catalog)
+            .replace("__TZ__", tz)
             .replace("__PARSER__", parser)
             .replace("__APP__", app))
 
@@ -98,6 +111,8 @@ def main():
                  "/index.html\n"
                  "  Cache-Control: public, max-age=0, must-revalidate\n")
 
+    tzd = json.loads(tz)
+    print(f"恐怖地带: {len(tzd['zones'])} 种地区 · {len(tzd['slots'])} 个时段 (至 {tz_end(tzd)})")
     cat = json.loads(open(catalog_path, encoding="utf-8").read())
     print(f"目录: {len(cat['uniques'])} 种暗金 · "
           f"{len(cat['sets'])} 个套装 / {sum(len(g['pieces']) for g in cat['sets'])} 件绿装 · "

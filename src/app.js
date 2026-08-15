@@ -14,8 +14,11 @@ const SLOTS = ['头盔', '盔甲', '盾牌', '副手', '手套', '鞋子', '腰�
 let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
-let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress', target: null, qty: 1 };
+let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
+  target: null, qty: 1, day: 0, affixes: [] };
 // target/qty: the one rune the cube page is solving for, and how many of it.
+// day: which day the terror-zone list is showing, 0 = today.
+// affixes: the affix keys that must ALL be present, the filter's AND list.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -198,6 +201,33 @@ async function parseFiles(files) {
 // Total pieces in a material's copy list, counting each stack in full.
 const tally = list => (list || []).reduce((n, c) => n + (c.n || 1), 0);
 
+/*
+ * What to call an item in the affix list. Uniques, set pieces and runewords
+ * have real names in the catalogue; rares and magics do not — the save stores
+ * their affixes as numbers, not as the assembled name — so those fall back to
+ * the base item plus a quality word, which is what you would recognise anyway.
+ */
+const QUALITY_ZH = { inferior: '低劣', normal: '普通', superior: '高质量',
+  magic: '魔法', set: '套装', rare: '稀有', unique: '暗金', crafted: '打造', tempered: '淬炼' };
+
+function gearName(it) {
+  if (it.runeword && CATALOG.runewords[it.runewordId]) {
+    const [en, zh] = CATALOG.runewords[it.runewordId];
+    return { zh, name: en, kind: 'runeword', base_zh: it.baseZh || it.baseName };
+  }
+  if (it.uniqueId !== null && CAT.uniqueById.has(it.uniqueId)) {
+    const u = CATALOG.uniques[CAT.uniqueById.get(it.uniqueId)];
+    return { zh: u.zh, name: u.name, kind: 'unique', base_zh: it.baseZh || it.baseName };
+  }
+  if (it.setId !== null && CAT.setById.has(it.setId)) {
+    const [gi, pi] = CAT.setById.get(it.setId);
+    const p = CATALOG.sets[gi].pieces[pi];
+    return { zh: p.zh, name: p.name, kind: 'set', base_zh: it.baseZh || it.baseName };
+  }
+  const base = it.baseZh || it.baseName || it.code;
+  return { zh: base, name: it.baseName || it.code, kind: it.quality, base_zh: base };
+}
+
 function buildReport(sources) {
   const uniques = CATALOG.uniques.map(u => ({ ...u, copies: [], count: 0, owned: false }));
   const sets = CATALOG.sets.map(g => ({
@@ -223,6 +253,9 @@ function buildReport(sources) {
   // an item is listed separately: you cannot get it back out.
   const materials = {};
   const socketed = {};
+  // Every wearable you actually own, with its rolled affixes, for the affix
+  // filter. Rares and magics live only here — no catalogue lists them.
+  const gear = [];
   for (const src of sources) {
     let notable = 0;
     for (const it of (src.items || [])) {
@@ -254,6 +287,10 @@ function buildReport(sources) {
         const [gi, pi] = CAT.setById.get(it.setId);
         sets[gi].pieces[pi].copies.push(copy);
         notable++;
+      }
+      if ((it.stats || []).length && !it.socketedIn) {
+        gear.push({ ...copy, ...gearName(it), slot: it.slot, quality: it.quality,
+          code: it.code, stats: it.stats });
       }
     }
     sourceRows.push({
@@ -291,7 +328,7 @@ function buildReport(sources) {
 
   return {
     scannedAt: new Date().toLocaleString('zh-CN', { hour12: false }),
-    sources: sourceRows, uniques, sets, hasChronicle, materials, socketed,
+    sources: sourceRows, uniques, sets, hasChronicle, materials, socketed, gear,
     runewords: Object.values(runewords).sort((a, b) => a.zh.localeCompare(b.zh, 'zh')),
     summary: {
       runewordKinds: Object.keys(runewords).length,
@@ -500,12 +537,13 @@ document.addEventListener('drop', async e => {
 /* ------------------------------------------------------------------ */
 /* Rendering                                                           */
 /* ------------------------------------------------------------------ */
-// Two things this tool does, kept apart: collecting gear, and cubing runes.
-const MODES = [['gear', '装备收藏'], ['runes', '符文合成']];
-const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['lost', '找回清单'],
-  ['dupes', '重复清理']];
+// Three things this tool does, kept apart: collecting gear, cubing runes, and
+// telling you where the terror zone is. Only the first two need a save file.
+const MODES = [['gear', '装备收藏'], ['runes', '符文合成'], ['tz', '恐怖地带']];
+const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['affix', '词条筛选'],
+  ['lost', '找回清单'], ['dupes', '重复清理']];
 // The chronicle tab only exists in D2R saves that have one.
-const TABS = () => (state.mode === 'runes' ? []
+const TABS = () => (state.mode !== 'gear' || !report ? []
   : GEAR_TABS.filter(([k]) => k !== 'lost' || report.hasChronicle));
 
 // Search matches the item's own name only — not its base type, not the part it
@@ -660,6 +698,12 @@ function renderModes() {
 }
 
 function renderTop() {
+  // The terror-zone page stands alone: no save, so no summary cards.
+  if (state.mode === 'tz' || !report) {
+    $('#cards').innerHTML = '';
+    $('#warnings').innerHTML = '';
+    return;
+  }
   const s = report.summary;
   if (state.mode === 'runes') {
     $('#cards').innerHTML = `
@@ -723,8 +767,8 @@ function renderTabs() {
 }
 
 function renderFilters() {
-  if (state.mode === 'runes') { $('#filters').innerHTML = ''; return; }
-  const showSlot = state.tab === 'uniques' || state.tab === 'lost';
+  if (state.mode !== 'gear' || !report) { $('#filters').innerHTML = ''; return; }
+  const showSlot = state.tab === 'uniques' || state.tab === 'lost' || state.tab === 'affix';
   const showOnly = state.tab === 'uniques' || state.tab === 'sets';
   let html = '';
   if (showOnly) {
@@ -1035,27 +1079,283 @@ function viewCube() {
 // Cheapest first, so the consumed/missing lists read high-value material last.
 const MATERIALS_ORDER = [...GEM_CODES, ...RUNES];
 
+/* ------------------------------------------------------------------ */
+/* Affix filter                                                        */
+/* ------------------------------------------------------------------ */
+/*
+ * The affixes worth hunting for, grouped the way players talk about them.
+ * These are stat ids from the game's own itemstatcost table; an entry matches
+ * an item when any of its ids is present with a non-zero value, and the shown
+ * number is the largest of them.
+ *
+ * Deliberately a shortlist, not all ~370 stats: the point is "rings with cast
+ * rate and resists", and a wall of every possible stat would bury that.
+ */
+const AFFIXES = [
+  { key: 'fcr', zh: '施法速度', unit: '%', ids: [105] },
+  { key: 'ias', zh: '攻击速度', unit: '%', ids: [93] },
+  { key: 'fhr', zh: '受击回复', unit: '%', ids: [99] },
+  { key: 'fbr', zh: '格挡率', unit: '%', ids: [102] },
+  { key: 'frw', zh: '跑步速度', unit: '%', ids: [96] },
+  { key: 'res', zh: '抗性', unit: '%', ids: [39, 41, 43, 45] },
+  { key: 'fres', zh: '火抗', unit: '%', ids: [39] },
+  { key: 'cres', zh: '冰抗', unit: '%', ids: [43] },
+  { key: 'lres', zh: '电抗', unit: '%', ids: [41] },
+  { key: 'pres', zh: '毒抗', unit: '%', ids: [45] },
+  { key: 'life', zh: '生命', unit: '', ids: [7] },
+  { key: 'mana', zh: '法力', unit: '', ids: [9] },
+  { key: 'str', zh: '力量', unit: '', ids: [0] },
+  { key: 'dex', zh: '敏捷', unit: '', ids: [2] },
+  { key: 'vit', zh: '体力', unit: '', ids: [3] },
+  { key: 'enr', zh: '精力', unit: '', ids: [1] },
+  { key: 'allsk', zh: '全部技能', unit: '', ids: [127] },
+  { key: 'clssk', zh: '职业技能', unit: '', ids: [83] },
+  { key: 'tabsk', zh: '技能树', unit: '', ids: [188] },
+  { key: 'mf', zh: '魔法寻找', unit: '%', ids: [80] },
+  { key: 'gf', zh: '金币掉落', unit: '%', ids: [79] },
+  { key: 'll', zh: '偷取生命', unit: '%', ids: [60] },
+  { key: 'ml', zh: '偷取法力', unit: '%', ids: [62] },
+  { key: 'ds', zh: '致命一击', unit: '%', ids: [141] },
+  { key: 'cb', zh: '压碎打击', unit: '%', ids: [136] },
+  { key: 'ow', zh: '撕裂伤口', unit: '%', ids: [135] },
+  { key: 'ed', zh: '增强伤害', unit: '%', ids: [17] },
+  { key: 'edef', zh: '增强防御', unit: '%', ids: [16] },
+  { key: 'ar', zh: '攻击准确率', unit: '', ids: [19] },
+  { key: 'pdr', zh: '物理伤害减免', unit: '', ids: [36] },
+  { key: 'mdr', zh: '魔法伤害减免', unit: '', ids: [37] },
+  { key: 'cnf', zh: '不会被冰冻', unit: '', ids: [153], flag: true },
+  { key: 'req', zh: '需求降低', unit: '%', ids: [91] },
+];
+const AFFIX_BY_KEY = new Map(AFFIXES.map(a => [a.key, a]));
+
+/*
+ * The best value an item has for one affix group, or null when it has none.
+ *
+ * A few stats are stored as fixed point — life and mana count in 1/256ths —
+ * so the raw number has to be scaled back down to what the game shows you.
+ */
+function affixValue(item, a) {
+  let best = null;
+  for (const s of item.stats) {
+    if (!a.ids.includes(s.id) || !s.value) continue;
+    const shift = CAT.stat(s.id).shift || 0;
+    const v = shift ? Math.round(s.value / (1 << shift)) : s.value;
+    if (!v) continue;
+    if (best === null || v > best) best = v;
+  }
+  return best;
+}
+
+function viewAffix() {
+  const picked = state.affixes.map(k => AFFIX_BY_KEY.get(k)).filter(Boolean);
+
+  const chips = AFFIXES.map(a =>
+    `<button class="chip" data-affix="${a.key}" aria-pressed="${state.affixes.includes(a.key)}">${a.zh}</button>`).join('');
+
+  let html = `<div class="afbar">
+    <div class="aftitle">要求同时具备（与）：${picked.length
+      ? picked.map(a => `<b>${a.zh}</b>`).join(' + ')
+      : '<span class="thin">还没选，下面列出全部有词条的物品</span>'}
+      ${picked.length ? '<button class="chip clr" data-affix="">清空</button>' : ''}</div>
+    <div class="afchips">${chips}</div>
+  </div>`;
+
+  // AND: an item has to carry every picked affix, not just one of them.
+  let rows = report.gear.filter(g =>
+    (!state.slot || g.slot === state.slot) &&
+    hit(g, state.q) &&
+    picked.every(a => affixValue(g, a) !== null));
+
+  // Best first on the affix you picked first — that is the one you care about.
+  const lead = picked[0];
+  rows = rows.slice().sort((x, y) => {
+    if (lead) {
+      const d = (affixValue(y, lead) || 0) - (affixValue(x, lead) || 0);
+      if (d) return d;
+    }
+    return (SLOTS.indexOf(x.slot) - SLOTS.indexOf(y.slot)) || x.zh.localeCompare(y.zh, 'zh');
+  });
+
+  html += `<div class="afcount">符合的物品：<b>${rows.length}</b> 件${
+    rows.length > 300 ? '（只显示前 300 件）' : ''}</div>`;
+
+  if (!rows.length) {
+    html += '<div class="empty">没有同时满足这些词条的物品。少选一两个再试。</div>';
+    return html;
+  }
+
+  html += '<div class="aflist">';
+  for (const g of rows.slice(0, 300)) {
+    // Show the affixes you asked for first, then whatever else it happens to
+    // have from the shortlist — so the reason it matched is always on top.
+    const shown = [];
+    for (const a of picked) shown.push([a, affixValue(g, a), true]);
+    for (const a of AFFIXES) {
+      if (a.key === 'res' || picked.includes(a)) continue;
+      const v = affixValue(g, a);
+      if (v !== null) shown.push([a, v, false]);
+    }
+    const kind = g.kind === 'unique' ? 'u' : g.kind === 'set' ? 's'
+      : g.kind === 'runeword' ? 'w' : g.kind === 'rare' ? 'r' : g.kind === 'crafted' ? 'c' : 'm';
+    html += `<div class="afitem">
+      <div class="afhead">
+        <span class="afname k${kind}">${esc(g.zh)}</span>
+        ${QUALITY_ZH[g.quality] && !['unique', 'set'].includes(g.kind)
+          ? `<span class="afslot">${QUALITY_ZH[g.quality]}</span>` : ''}
+        ${g.slot !== g.zh ? `<span class="afslot">${esc(g.slot)}</span>` : ''}
+        ${g.base_zh && g.base_zh !== g.zh ? `<span class="afbase">${esc(g.base_zh)}</span>` : ''}
+        ${g.ethereal ? '<span class="afbase">虚空</span>' : ''}
+        ${g.sockets ? `<span class="afbase">${g.sockets}孔</span>` : ''}
+      </div>
+      <div class="afwhere">${copiesHtml([g], { sockets: false })}</div>
+      <div class="afmods">${shown.map(([a, v, want]) =>
+        `<span class="afmod${want ? ' want' : ''}">${a.flag ? a.zh
+          : `${a.zh} ${v > 0 ? '+' : ''}${v}${a.unit}`}</span>`).join('')}</div>
+    </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+/* ------------------------------------------------------------------ */
+/* Terror zones                                                        */
+/* ------------------------------------------------------------------ */
+/*
+ * Offline terror zones are not rolled by your machine — every offline game
+ * walks the same fixed calendar — so the whole schedule ships inside this page
+ * and nothing here touches the network. Online zones are a different rotation
+ * picked by Blizzard's servers, and this page deliberately does not guess at it.
+ */
+const TZ_START = Date.parse(TZ.start);
+const TZ_STEP = TZ.step * 1000;
+const TZ_COUNT = TZ.slots.length;
+const TZ_END = TZ_START + TZ_STEP * TZ_COUNT;
+
+const TZ_TAGS = { boss: '综合最好', exp: '刷经验', loot: '刷装备' };
+const IMMUNE = { c: '冰', f: '火', l: '电', p: '毒', ph: '物理' };
+
+// Which slot covers an instant, or -1 when the baked-in calendar doesn't reach.
+function tzSlot(ms) {
+  if (ms < TZ_START || ms >= TZ_END) return -1;
+  return Math.floor((ms - TZ_START) / TZ_STEP);
+}
+
+const tzZone = i => TZ.zones[TZ.alphabet.indexOf(TZ.slots[i])];
+const tzTime = i => new Date(TZ_START + i * TZ_STEP);
+
+const hhmm = d => String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+
+// Local midnight, `off` days from today — the day boundary the player thinks in.
+function tzMidnight(off) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + off);
+  return d;
+}
+
+const tagHtml = z => z.tag ? ` <span class="tzt ${z.tag}">${TZ_TAGS[z.tag]}</span>` : '';
+
+function viewTz() {
+  const now = Date.now();
+  const cur = tzSlot(now);
+  if (cur < 0) {
+    return `<div class="warn">页面内置的恐怖地带排期只覆盖 ${new Date(TZ_START).toLocaleDateString()} 到
+      ${new Date(TZ_END).toLocaleDateString()}，现在不在范围内。重新运行 <code>python3 make_tz.py</code>
+      拉取新排期后重新打包即可。</div>`;
+  }
+
+  const z = tzZone(cur);
+  const ends = TZ_START + (cur + 1) * TZ_STEP;
+  const mins = Math.max(0, Math.round((ends - now) / 60000));
+  const nxt = cur + 1 < TZ_COUNT ? tzZone(cur + 1) : null;
+
+  const imm = (z.imm || []).map(k => IMMUNE[k] || k).join('、');
+  const packs = (z.packs || []).length === 2 ? `${z.packs[0]}~${z.packs[1]} 组` : '';
+
+  let html = `
+    <div class="tznow">
+      <div class="lbl">当前恐怖地带 · 到 ${hhmm(new Date(ends))} 结束（还有 <b class="left">${mins}</b> 分钟）</div>
+      <div class="z">${esc(z.zh)}${tagHtml(z)}</div>
+      <div class="en">${esc(z.en)}</div>
+      <div class="meta">
+        ${imm ? `<span>免疫：${esc(imm)}</span>` : ''}
+        ${packs ? `<span>首领组：${packs}</span>` : ''}
+        ${(z.su || []).length ? `<span>超级唯一怪：${esc(z.su.join('、'))}</span>` : ''}
+      </div>
+    </div>
+    ${nxt ? `<p class="tznext">${hhmm(new Date(ends))} 起换成 <b>${esc(nxt.zh)}</b>${tagHtml(nxt)}</p>` : ''}`;
+
+  // One local day at a time. The slots are evenly spaced, so the day's first
+  // slot is found by clock arithmetic rather than by scanning.
+  const from = tzSlot(tzMidnight(state.day).getTime());
+  const to = tzSlot(tzMidnight(state.day + 1).getTime());
+  const first = from >= 0 ? from : 0;
+  const last = to >= 0 ? to : TZ_COUNT;
+
+  const label = state.day === 0 ? '今天'
+    : state.day === 1 ? '明天'
+      : state.day === -1 ? '昨天' : `${state.day > 0 ? '+' : ''}${state.day} 天`;
+  const date = tzMidnight(state.day).toLocaleDateString('zh-CN',
+    { month: 'long', day: 'numeric', weekday: 'long' });
+
+  html += `
+    <div class="tzday">
+      <h3>${label} <span class="thin">${esc(date)} · 每 30 分钟换一次</span></h3>
+      <span class="sp"></span>
+      <button class="btn small" data-day="-1"${from <= 0 ? ' disabled' : ''}>← 前一天</button>
+      <button class="btn small" data-day="0"${state.day === 0 ? ' disabled' : ''}>今天</button>
+      <button class="btn small" data-day="1"${last >= TZ_COUNT ? ' disabled' : ''}>后一天 →</button>
+    </div>
+    <div class="tzlist">`;
+
+  for (let i = first; i < last; i++) {
+    const zz = tzZone(i);
+    const t = tzTime(i);
+    const cls = i === cur ? 'now' : (TZ_START + (i + 1) * TZ_STEP <= now ? 'past' : '');
+    html += `<div class="tzrow ${cls}">
+      <span class="t">${hhmm(t)}</span>
+      <span class="z" title="${esc(zz.en)}">${esc(zz.zh)}</span>${tagHtml(zz)}
+    </div>`;
+  }
+  html += '</div>';
+
+  const daysLeft = Math.floor((TZ_END - now) / 86400000);
+  html += `<p class="hint" style="margin-top:18px">
+    这是<b>单机（离线）</b>的排期，本机时间算出来，不联网。联机的恐怖地带是另一套轮换，由暴雪服务器决定，这里不做猜测。<br>
+    内置排期还剩 ${daysLeft} 天（到 ${new Date(TZ_END).toLocaleDateString()}），到期前重新运行 <code>python3 make_tz.py</code> 更新。</p>`;
+  return html;
+}
+
 function renderView() {
   TIPS.clear(); tipSeq = 0;
   hideTip();
+  if (state.mode === 'tz') { $('#view').innerHTML = viewTz(); return; }
   if (state.mode === 'runes') { $('#view').innerHTML = viewCube(); return; }
-  const fn = { sets: viewSets, uniques: viewUniques, lost: viewLost, dupes: viewDupes };
+  const fn = { sets: viewSets, uniques: viewUniques, affix: viewAffix,
+    lost: viewLost, dupes: viewDupes };
   $('#view').innerHTML = fn[state.tab]();
 }
 
 function render() {
-  $('#intro').hidden = true;
-  $('#main').hidden = false;
-  const s = report.summary;
-  setStatus(`已读取 ${s.files} 个存档文件 · ${s.totalItems} 件物品 · ${report.scannedAt}`);
-  renderModes(); renderTop(); renderTabs(); renderFilters(); renderView();
+  // Terror zones need no save file, so that page can show before anything is
+  // loaded; the other two keep the "how to use" panel up until there is one.
+  const standalone = state.mode === 'tz';
+  $('#modes').hidden = false;
+  $('#intro').hidden = !!report || standalone;
+  $('#main').hidden = !report && !standalone;
+  if (report) {
+    const s = report.summary;
+    setStatus(`已读取 ${s.files} 个存档文件 · ${s.totalItems} 件物品 · ${report.scannedAt}`);
+  }
+  renderModes(); renderTop(); renderTabs(); renderFilters();
+  if (!$('#main').hidden) renderView();
 }
 
 $('#modes').addEventListener('click', e => {
   const b = e.target.closest ? e.target.closest('button[data-mode]') : null;
   if (!b || b.dataset.mode === state.mode) return;
   state.mode = b.dataset.mode;
-  renderModes(); renderTop(); renderTabs(); renderFilters(); renderView();
+  render();
 });
 
 $('#tabs').addEventListener('click', e => {
@@ -1074,12 +1374,30 @@ $('#filters').addEventListener('click', e => {
   renderFilters(); renderView();
 });
 
-/* The cube shopping list: add, subtract, drop, clear. */
+/* The cube shopping list: add, subtract, drop, clear. Plus day paging on the
+   terror-zone page, where 0 means "back to today" and ±1 steps a day. */
 $('#view').addEventListener('click', e => {
-  const b = e.target.closest ? e.target.closest('button[data-add],button[data-sub],button[data-plus],button[data-clear]') : null;
+  const b = e.target.closest
+    ? e.target.closest('button[data-add],button[data-sub],button[data-plus],button[data-clear],' +
+      'button[data-day],button[data-affix]')
+    : null;
   if (b && b.disabled) return;
   if (!b) return;
   const d = b.dataset;
+  if (d.affix !== undefined) {
+    // Empty value is the "clear" button; otherwise toggle that affix.
+    if (!d.affix) state.affixes = [];
+    else if (state.affixes.includes(d.affix)) state.affixes = state.affixes.filter(k => k !== d.affix);
+    else state.affixes = [...state.affixes, d.affix];
+    renderView();
+    return;
+  }
+  if (d.day !== undefined) {
+    const step = Number(d.day);
+    state.day = step === 0 ? 0 : state.day + step;
+    renderView();
+    return;
+  }
   if (d.clear) { state.target = null; state.qty = 1; }
   else if (d.add) {
     // Clicking the rune already being solved for asks for one more of it.
@@ -1106,6 +1424,16 @@ document.addEventListener('keydown', e => {
   btn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   sync();
 }
+
+/* The mode bar is live from the start — the terror-zone page works with no save. */
+render();
+
+/*
+ * Terror zones turn over on the half hour; re-render on the boundary so an
+ * open tab never shows a stale zone. Checking once a minute is enough and
+ * costs nothing.
+ */
+setInterval(() => { if (state.mode === 'tz') renderView(); }, 60000);
 
 /* Re-open the last folder automatically when the browser still allows it. */
 (async () => {

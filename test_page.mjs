@@ -42,6 +42,8 @@ const ctx = vm.createContext({
   Blob, TextEncoder, URL,
   Date, Math, JSON, Map, Set, Proxy, Intl, Object, Array,
   setTimeout, clearTimeout,
+  // The terror-zone page re-renders itself on a timer; never let it fire here.
+  setInterval: () => 0, clearInterval() {},
 });
 
 for (const src of scripts) vm.runInContext(src, ctx);
@@ -286,6 +288,97 @@ print(json.dumps({"bad": bad,
   } finally {
     fs.rmSync(zipPath, { force: true });
   }
+}
+
+/* --- affix filter ---------------------------------------------------- */
+{
+  vm.runInContext(`globalThis.__affix = function (rep) {
+    report = rep;
+    state.mode = 'gear'; state.tab = 'affix'; state.q = ''; state.slot = null;
+    const count = () => {
+      const html = viewAffix();
+      const m = html.match(/符合的物品：<b>(\\d+)<\\/b>/);
+      if (!m) throw new Error('affix view lost its count');
+      return Number(m[1]);
+    };
+    const out = { gear: report.gear.length };
+    state.affixes = [];
+    out.all = count();
+    state.affixes = ['fcr'];
+    out.fcr = count();
+    state.affixes = ['res'];
+    out.res = count();
+    // AND, not OR: adding a requirement can only ever shrink the result.
+    state.affixes = ['fcr', 'res'];
+    out.both = count();
+    // Independently recomputed from the raw stats, no view code involved.
+    const has = (g, ids) => g.stats.some(s => ids.includes(s.id) && s.value);
+    out.expectBoth = report.gear.filter(g => has(g, [105]) && has(g, [39, 41, 43, 45])).length;
+    // Slot narrowing has to compose with the affix requirement.
+    state.slot = '戒指';
+    out.rings = count();
+    out.expectRings = report.gear.filter(g => g.slot === '戒指' &&
+      has(g, [105]) && has(g, [39, 41, 43, 45])).length;
+    state.slot = null; state.affixes = []; state.tab = 'sets';
+    return out;
+  };`, ctx);
+  const af = ctx.__affix(report);
+
+  if (af.both !== af.expectBoth) {
+    console.error(`✗ 与逻辑不符：界面 ${af.both} 件，直接算 ${af.expectBoth} 件`); ok = false;
+  }
+  if (af.rings !== af.expectRings) {
+    console.error(`✗ 部位+词条组合筛选不符：${af.rings} vs ${af.expectRings}`); ok = false;
+  }
+  if (af.both > Math.min(af.fcr, af.res)) {
+    console.error('✗ 与逻辑出错：同时要求两个词条的结果比单个还多'); ok = false;
+  }
+  if (af.all !== af.gear) { console.error('✗ 不选词条时应列出全部有词条的物品'); ok = false; }
+  console.log(`✓ 词条筛选：${af.gear} 件带词条的物品 · 施法速度 ${af.fcr} 件 · 抗性 ${af.res} 件 · ` +
+    `两者同时 ${af.both} 件（与逻辑，独立复算一致）`);
+  console.log(`  同时满足的戒指：${af.rings} 件`);
+}
+
+/* --- terror zones ---------------------------------------------------- */
+{
+  const tz = vm.runInContext(`(function () {
+    state.mode = 'tz';
+    const out = { days: {} };
+    // The schedule is baked in, so it must render with no save loaded at all.
+    report = null;
+    state.day = 0;
+    out.noSave = viewTz().length;
+    // Slot lookup must agree with plain arithmetic on the published start time.
+    const i = tzSlot(Date.now());
+    out.slot = i;
+    out.zone = tzZone(i).zh;
+    out.expect = TZ.zones[TZ.alphabet.indexOf(TZ.slots[i])].zh;
+    out.step = TZ.step;
+    out.count = TZ.slots.length;
+    out.kinds = TZ.zones.length;
+    out.tagged = TZ.zones.filter(z => z.tag).length;
+    // Every day must list a full 24 hours' worth of slots.
+    for (const d of [-1, 0, 1]) {
+      state.day = d;
+      const html = viewTz();
+      out.days[d] = (html.match(/class="tzrow/g) || []).length;
+    }
+    state.day = 0;
+    out.now = (viewTz().match(/class="tzrow now"/g) || []).length;
+    return out;
+  })()`, ctx);
+
+  const perDay = 86400 / tz.step;
+  if (!tz.noSave) { console.error('✗ 恐怖地带在没有存档时渲染为空'); ok = false; }
+  if (tz.slot < 0) { console.error('✗ 内置排期没有覆盖当前时间，需要重新运行 make_tz.py'); ok = false; }
+  if (tz.zone !== tz.expect) { console.error('✗ 当前地区查表不一致'); ok = false; }
+  for (const [d, n] of Object.entries(tz.days)) {
+    if (n !== perDay) { console.error(`✗ 第 ${d} 天只有 ${n} 个时段，应为 ${perDay}`); ok = false; }
+  }
+  if (tz.now !== 1) { console.error(`✗ 今天高亮了 ${tz.now} 个时段，应为 1 个`); ok = false; }
+  console.log(`✓ 恐怖地带：${tz.kinds} 种地区（${tz.tagged} 种标了推荐）· ${tz.count} 个时段 · ` +
+    `每天 ${perDay} 格 · 无存档也能看`);
+  console.log(`  当前：${tz.zone}`);
 }
 
 const warned = report.sources.filter(x => x.error || x.warnings.length);

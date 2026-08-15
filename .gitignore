@@ -7,9 +7,12 @@ py_dump.json
 js_dump.json
 
 # 可用 fetch_data.py / fetch_names.py / fetch_t2s.py 重新下载的原始数据表。
-# 页面真正需要的 data/catalog.json 是提交的。
+# 页面真正需要的几个是提交的：物品目录、恐怖地带排期、手工译名。
+# data/tz_raw.json 是 6MB 的上游原始排期，由 make_tz.py 压成 tz.json，不提交。
 data/*
 !data/catalog.json
+!data/tz.json
+!data/names_zh.json
 
 # 本地便捷副本，内容与 dist/index.html 完全相同（避免每次重建双份写入历史）
 暗黑2存档管家.html

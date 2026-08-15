@@ -32,24 +32,30 @@ RUNES = [f"r{i:02d}" for i in range(1, 34)]
 
 # What people actually run, in the order you meet them. Hell only: the lower
 # difficulties cannot reach the high runes at all, which makes them noise here.
+#
+# The last two numbers — seconds per run, and how many drop-eligible kills that
+# run yields — are NOT game data. Nothing in the game files knows how fast you
+# clear Travincal. They are starting estimates for a geared character with
+# teleport, and the page lets you replace them, because per-hour numbers are
+# only as honest as the pace you actually run at.
 TARGETS = [
-    ("countess", "女伯爵", 1, "Countess (H)"),
-    ("smith", "铁匠", 1, "Smith (H)"),
-    ("andariel", "安达利尔", 1, "Andarielq (H)"),
-    ("radament", "拉达门特", 2, "Radament (H)"),
-    ("summoner", "召唤者", 2, "Summoner (H)"),
-    ("duriel", "督瑞尔", 2, "Duriel (H)"),
-    ("council", "崔凡克议会", 3, "Council (H)"),
-    ("mephisto", "墨菲斯托", 3, "Mephisto (H)"),
-    ("izual", "伊苏尔", 4, "Izual (H)"),
-    ("hephasto", "锻炉守卫", 4, "Haphesto (H)"),
-    ("diablo", "暗黑破坏神", 4, "Diablo (H)"),
-    ("shenk", "香克", 5, "Act 5 (H) Super A"),
-    ("pindle", "平德尔斯金", 5, "Act 5 (H) Super Cx"),
-    ("nihlathak", "尼拉塞克", 5, "Nihlathak (H)"),
-    ("cowking", "牛王", 5, "Cow King (H)"),
-    ("cow", "地狱奶牛", 5, "Cow (H)"),
-    ("baal", "巴尔", 5, "Baal (H)"),
+    ("countess", "女伯爵", 1, "Countess (H)", 25, 1),
+    ("smith", "铁匠", 1, "Smith (H)", 20, 1),
+    ("andariel", "安达利尔", 1, "Andarielq (H)", 35, 1),
+    ("radament", "拉达门特", 2, "Radament (H)", 30, 1),
+    ("summoner", "召唤者", 2, "Summoner (H)", 25, 1),
+    ("duriel", "督瑞尔", 2, "Duriel (H)", 70, 1),
+    ("council", "崔凡克议会", 3, "Council (H)", 25, 12),
+    ("mephisto", "墨菲斯托", 3, "Mephisto (H)", 45, 1),
+    ("izual", "伊苏尔", 4, "Izual (H)", 35, 1),
+    ("hephasto", "锻炉守卫", 4, "Haphesto (H)", 40, 1),
+    ("diablo", "暗黑破坏神", 4, "Diablo (H)", 90, 1),
+    ("shenk", "香克", 5, "Act 5 (H) Super A", 25, 1),
+    ("pindle", "平德尔斯金", 5, "Act 5 (H) Super Cx", 15, 1),
+    ("nihlathak", "尼拉塞克", 5, "Nihlathak (H)", 35, 1),
+    ("cowking", "牛王", 5, "Cow King (H)", 90, 1),
+    ("cow", "地狱奶牛", 5, "Cow (H)", 180, 150),
+    ("baal", "巴尔", 5, "Baal (H)", 120, 1),
 ]
 
 
@@ -87,16 +93,18 @@ def expected(tc, name, want, seen=()):
 
 def main():
     tc = load_tc()
-    missing = [t for _, _, _, t in TARGETS if t not in tc]
+    missing = [t for _, _, _, t, _, _ in TARGETS if t not in tc]
     if missing:
         raise SystemExit(f"掉落表里没有这些目标: {missing}")
 
     targets = []
-    for key, zh, act, name in TARGETS:
+    for key, zh, act, name, secs, kills in TARGETS:
         rates = [expected(tc, name, r) for r in RUNES]
         top = max((i + 1 for i, e in enumerate(rates) if e > 0), default=0)
         targets.append({
             "key": key, "zh": zh, "act": act, "tc": name,
+            # Editable in the page; see the note on TARGETS above.
+            "secs": secs, "kills": kills,
             # Rounded hard: these are one-in-tens-of-thousands numbers, and
             # carrying more digits would only pretend to a precision the
             # rounding of the tables does not support.

@@ -16,13 +16,15 @@ let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
   target: null, qty: 1, day: 0, affixes: [], bases: [], zone: null,
-  skClass: 'sor', skLevel: 99, skQuests: true, skPts: {} };
+  skClass: 'sor', skLevel: 99, skQuests: true, skPts: {},
+  dropBy: 'kill', pace: {} };
 // target/qty: the one rune the cube page is solving for, and how many of it.
 // day: which day the terror-zone list is showing, 0 = today.
 // affixes: the affix keys that must ALL be present, the filter's AND list.
 // bases: same idea on the runeword-base tab (white / superior / ethereal / sockets).
 // zone: index into the terror-zone table when following one zone, else null.
 // sk*: the skill planner's class, character level, quest bonus and spent points.
+// dropBy/pace: per-kill vs per-hour on the rune drop panel, and your own run pace.
 
 /* ------------------------------------------------------------------ */
 /* Horadric cube: rune and gem upgrade recipes                         */
@@ -164,6 +166,8 @@ const loadHandle = () => idb('readonly', s => s.get('dir')).catch(() => null);
  * the bundle. Stored as data URLs so they survive a refresh without asking for
  * folder permission again.
  */
+const savePace = m => idb('readwrite', s => s.put(m, 'pace')).catch(() => {});
+const loadPace = () => idb('readonly', s => s.get('pace')).catch(() => null);
 const saveIcons = m => idb('readwrite', s => s.put(m, 'icons')).catch(() => {});
 const loadIcons = () => idb('readonly', s => s.get('icons')).catch(() => null);
 
@@ -1116,21 +1120,47 @@ const MATERIALS_ORDER = [...GEM_CODES, ...RUNES];
  */
 const DROP_IDX = new Map(DROPS.runes.map((c, i) => [c, i]));
 
+/*
+ * Per-hour needs two numbers the game files do not have: how long a run takes
+ * and how many drop-eligible kills it yields. Those are yours, not the game's,
+ * so they start as estimates and stay editable — and the per-kill column is
+ * always shown next to them, because that half *is* game data.
+ */
+const pace = t => ({ ...t, ...(state.pace[t.key] || {}) });
+const perHour = t => {
+  const p = pace(t);
+  return p.secs > 0 ? (3600 / p.secs) * p.kills : 0;
+};
+
 const oneIn = e => e >= 1 ? `${e.toFixed(2)} 个/杀`
   : `1 / ${Math.round(1 / e).toLocaleString('zh-CN')}`;
+
+// "一年半" beats "0.00061 个/小时" when the answer is "basically never".
+function waitLabel(perHourRate) {
+  if (!perHourRate) return '—';
+  if (perHourRate >= 1) return `${perHourRate.toFixed(1)} 个/小时`;
+  const hours = 1 / perHourRate;
+  if (hours < 48) return `平均 ${hours.toFixed(1)} 小时 1 个`;
+  const days = hours / 24;
+  if (days < 400) return `平均 ${days.toFixed(0)} 天 1 个`;
+  return `平均 ${(days / 365).toFixed(1)} 年 1 个`;
+}
 
 function dropRows(code) {
   const i = DROP_IDX.get(code);
   if (i === undefined) return [];
-  return DROPS.targets
-    .map(t => ({ ...t, rate: t.rates[i] }))
-    .filter(t => t.rate > 0)
-    .sort((a, b) => b.rate - a.rate);
+  const rows = DROPS.targets
+    .map(t => ({ ...pace(t), rate: t.rates[i] }))
+    .filter(t => t.rate > 0);
+  for (const t of rows) t.hourly = t.rate * perHour(t);
+  const key = state.dropBy === 'hour' ? 'hourly' : 'rate';
+  return rows.sort((a, b) => b[key] - a[key]);
 }
 
 function dropPanel(code) {
   const rows = dropRows(code);
   const zh = matZh(code);
+  const byHour = state.dropBy === 'hour';
   if (!rows.length) {
     const best = DROPS.targets.reduce((m, t) => Math.max(m, t.top), 0);
     return `<div class="drops">
@@ -1139,17 +1169,33 @@ function dropPanel(code) {
         这一档只能靠恐怖地带里的高等级怪，或者自己合成。</div>
     </div>`;
   }
-  const best = rows[0].rate;
+  const best = byHour ? rows[0].hourly : rows[0].rate;
   return `<div class="drops">
-    <h3>${runeNo(code)} 号 ${esc(zh)} 上哪掉 <span class="thin">地狱难度 · 单人</span></h3>
-    <div class="droplist">${rows.map(t => `
-      <div class="droprow${t.rate === best ? ' best' : ''}">
+    <h3>${runeNo(code)} 号 ${esc(zh)} 上哪掉 <span class="thin">地狱难度 · 单人</span>
+      <span class="sp"></span>
+      <button class="chip" data-dropby="kill" aria-pressed="${!byHour}">按每杀</button>
+      <button class="chip" data-dropby="hour" aria-pressed="${byHour}">按每小时</button>
+    </h3>
+    <div class="droplist">${rows.map(t => {
+      const v = byHour ? t.hourly : t.rate;
+      return `<div class="droprow${v === best ? ' best' : ''}">
         <span class="a">第${'一二三四五'[t.act - 1]}幕</span>
         <span class="n">${esc(t.zh)}</span>
-        <span class="r">${oneIn(t.rate)}</span>
-        ${t.rate === best ? '<span class="rec">推荐</span>' : ''}
-      </div>`).join('')}</div>
-    <p class="hint">数字是每杀一次期望掉几个，由游戏掉落表逐层算出，不是抄来的。
+        ${byHour ? `<span class="pace">
+          <input class="pn" type="number" min="1" max="3600" value="${t.secs}"
+                 data-pace="${t.key}" data-field="secs" title="一趟几秒">秒
+          <span class="x">×</span>
+          <input class="pn" type="number" min="1" max="999" value="${t.kills}"
+                 data-pace="${t.key}" data-field="kills" title="一趟能杀几只">只
+        </span>` : ''}
+        <span class="r">${byHour ? waitLabel(v) : oneIn(v)}</span>
+        ${v === best ? '<span class="rec">推荐</span>' : ''}
+      </div>`;
+    }).join('')}</div>
+    <p class="hint">${byHour
+      ? '每趟的<b>秒数</b>和<b>能杀几只</b>是可以改的估计值 —— 游戏数据里没有这两个数，' +
+        '它取决于你的角色。改完这里算的才是你自己的节奏。掉率本身是算出来的，不受影响。'
+      : '数字是每杀一次期望掉几个，由游戏掉落表逐层算出，不是抄来的。'}<br>
       魔法寻找对符文<b>没有</b>影响；多人游戏会降低空掉率，这里按单人算。
       掉不出某个符文的目标直接不列 —— 那是掉落表的硬上限，刷再多也不会出。</p>
   </div>`;
@@ -1592,12 +1638,14 @@ $('#filters').addEventListener('click', e => {
 $('#view').addEventListener('click', e => {
   const b = e.target.closest
     ? e.target.closest('button[data-add],button[data-sub],button[data-plus],button[data-clear],' +
-      'button[data-day],button[data-affix],button[data-base],button[data-zone]')
+      'button[data-day],button[data-affix],button[data-base],button[data-zone],' +
+      'button[data-dropby]')
     : null;
   if (b && b.disabled) return;
   if (!b) return;
   const d = b.dataset;
   if (d.zone !== undefined) { state.zone = null; renderView(); return; }
+  if (d.dropby !== undefined) { state.dropBy = d.dropby; renderView(); return; }
   if (d.base !== undefined) {
     if (!d.base) state.bases = [];
     else if (state.bases.includes(d.base)) state.bases = state.bases.filter(k => k !== d.base);
@@ -1871,6 +1919,13 @@ $('#view').addEventListener('contextmenu', e => {
 $('#view').addEventListener('input', e => {
   const t = e.target;
   if (!t || !t.dataset) return;
+  if (t.dataset.pace !== undefined) {
+    const n = Math.max(1, Number(t.value) || 1);
+    state.pace[t.dataset.pace] = { ...(state.pace[t.dataset.pace] || {}), [t.dataset.field]: n };
+    savePace(state.pace);
+    renderView();
+    return;
+  }
   if (t.dataset.sklevel !== undefined) {
     state.skLevel = Math.min(99, Math.max(1, Number(t.value) || 1));
     renderView();
@@ -1890,5 +1945,13 @@ loadIcons().then(m => {
   if (m && Object.keys(m).length) {
     SKILL_ICONS = m;
     if (state.mode === 'skills') renderView();
+  }
+});
+
+/* Your own run pace, kept between visits. */
+loadPace().then(m => {
+  if (m && Object.keys(m).length) {
+    state.pace = m;
+    if (state.mode === 'runes') renderView();
   }
 });

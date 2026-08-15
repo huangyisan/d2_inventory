@@ -366,6 +366,20 @@ print(json.dumps({"bad": bad,
     // Panels render for every rune, including the ones nothing can drop.
     out.panels = 0;
     for (const code of RUNES) { if (dropPanel(code).length) out.panels++; }
+
+    // Per hour reorders by pace, not by per-kill odds: Travincal is worse per
+    // kill than Mephisto and still wins, because a run yields a dozen bodies.
+    state.dropBy = 'hour'; state.pace = {};
+    const byHour = dropRows('r30');
+    out.hourBest = byHour[0].zh;
+    out.hourSorted = byHour.every((r, i) => i === 0 || byHour[i - 1].hourly >= r.hourly);
+    state.dropBy = 'kill';
+    out.killBest = dropRows('r30')[0].zh;
+    // Editing the pace has to change the answer, or the inputs are decoration.
+    state.dropBy = 'hour';
+    state.pace = { council: { secs: 3600, kills: 1 } };
+    out.hobbled = dropRows('r30')[0].zh;
+    state.pace = {}; state.dropBy = 'kill';
     return out;
   })()`, ctx);
 
@@ -373,6 +387,10 @@ print(json.dumps({"bad": bad,
   if (dr.countessInZod) { console.error('✗ 女伯爵被列进了 33 号的掉落来源'); ok = false; }
   if (dr.panels !== 33) { console.error(`✗ 只有 ${dr.panels} 个符文有掉落面板`); ok = false; }
   if (!dr.zodTargets.length) { console.error('✗ 33 号一个掉落来源都没有'); ok = false; }
+  if (!dr.hourSorted) { console.error('✗ 每小时视图没有按每小时排序'); ok = false; }
+  if (dr.hourBest === dr.hobbled) { console.error('✗ 改了刷图节奏，排名却没变'); ok = false; }
+  console.log(`  30 号：按每杀最佳是「${dr.killBest}」，按每小时最佳是「${dr.hourBest}」` +
+    `（把议会调成一小时一只后变成「${dr.hobbled}」）`);
   console.log(`✓ 符文掉落：28 号最佳目标是「${dr.loBest}」· ` +
     `33 号只有 ${dr.zodTargets.length} 个来源（${dr.zodTargets.join('、')}）`);
   console.log(`  女伯爵每杀出 ${dr.countessAny} 个符文，但最高只到 ${dr.countessTop} 号`);

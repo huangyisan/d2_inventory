@@ -449,7 +449,7 @@
       <button class="btn" id="reload" disabled>重新读取</button>
       <button class="btn" id="backup" disabled>备份存档</button>
       <input type="file" id="fallback" webkitdirectory directory multiple hidden>
-      <span class="hint">玩完游戏存档后，点「重新读取」即可刷新（⌘R / Ctrl+R）；「备份存档」把当前读到的存档打包成 zip 下载。</span>
+      <span class="hint">玩完游戏存档后，点「重新读取」即可刷新（⌘R / Ctrl+R）；「备份存档」把整个存档文件夹原样复制一份到你指定的位置。</span>
     </div>
   </header>
 
@@ -463,7 +463,7 @@
       <li>点「选择存档文件夹」，选中 D2R 的存档目录，浏览器会问一次读取权限。</li>
       <li>页面会扫描目录下所有 <code>.d2s</code> 小号和 <code>.d2i</code> 共享仓库，列出你的暗金与绿装收藏。</li>
       <li>之后每次玩完游戏，回到这个页面点「重新读取」就会刷新。文件夹会被记住，下次打开自动载入。</li>
-      <li>点「备份存档」，会把当前读到的全部存档原样打包成一个 zip 下载到你的「下载」目录，文件名带时间戳。存档本身不会被改动。</li>
+      <li>点「备份存档」，第一次会让你选一个存放备份的文件夹（选一次就记住了）。之后每次点一下，就在那里新建一个带时间戳的目录，把<b>存档文件夹里的全部内容</b>原样复制进去 —— 不只是 <code>.d2s</code> 和 <code>.d2i</code>，共享仓库、设置、控制文件都在内，子目录结构保持不变。复制出来就是原文件，要还原直接拖回去，不用解压。存档本身全程只读，不会被改动。</li>
     </ol>
     <div class="hint">macOS 存档目录通常在：<br>
       <code>~/Library/Application Support/Blizzard/Diablo II Resurrected/</code><br>

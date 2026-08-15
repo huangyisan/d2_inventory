@@ -36,7 +36,9 @@ const document = {
 const ctx = vm.createContext({
   document,
   window: { addEventListener() {}, innerWidth: 1200, innerHeight: 900 },  // no showDirectoryPicker -> fallback branch
-  indexedDB: { open: () => ({ }) },
+  // No storage here. Fail the request rather than leave it pending: every
+  // caller has a .catch, and a promise that never settles would hang the test.
+  indexedDB: { open: () => { const r = {}; setTimeout(() => r.onerror && r.onerror(), 0); return r; } },
   navigator: { userAgent: 'node' },
   console,
   Blob, TextEncoder, URL,
@@ -268,6 +270,75 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
   const ist = ctx.__max('r24');
   if (ist.max !== 1) { console.error(`✗ 伊司特最多应为 1 个（不算仓库现货），实际 ${ist.max}`); ok = false; }
   console.log(`✓ 上限自洽：古尔最多 ${g.max} 个、乌姆最多 ${ctx.__max('r22').max} 个（多一个即不成立）`);
+}
+
+/* --- backing up the folder copies everything, not just the saves ----- */
+{
+  const bk = await vm.runInContext(`(async function () {
+    const written = {};
+    const file = (name, bytes) => ({
+      kind: 'file', name,
+      getFile: async () => ({ arrayBuffer: async () => new Uint8Array(bytes).buffer }),
+    });
+    const dir = (name, children) => ({
+      kind: 'directory', name, values: () => children[Symbol.iterator](),
+    });
+    // A real save folder is not only .d2s and .d2i.
+    const src = dir('saves', [
+      file('Yisan.d2s', [1, 2, 3, 4]),
+      file('SharedStashSoftCoreV2.d2i', [9, 9, 9]),
+      file('Settings.json', [123, 125]),
+      file('Yisan.key', [7]),
+      dir('mods', [file('deep.txt', [42, 42])]),
+    ]);
+    const dest = (prefix) => ({
+      name: 'backups',
+      isSameEntry: async () => false,
+      queryPermission: async () => 'granted',
+      getDirectoryHandle: async n => dest(prefix ? prefix + '/' + n : n),
+      getFileHandle: async n => ({
+        createWritable: async () => ({
+          write: async d => { written[(prefix ? prefix + '/' : '') + n] = Array.from(d); },
+          close: async () => {},
+        }),
+      }),
+    });
+    window.showDirectoryPicker = async () => dest('');
+    dirHandle = src;
+    await backupNow();
+    delete window.showDirectoryPicker;
+    dirHandle = null;
+    // Strip the timestamped folder the backup creates at the destination root.
+    const out = {};
+    for (const [k, v] of Object.entries(written)) {
+      const i = k.indexOf('/');
+      out[k.slice(i + 1)] = v;
+      out['__root'] = k.slice(0, i);
+    }
+    return out;
+  })()`, ctx);
+
+  const want = {
+    'Yisan.d2s': [1, 2, 3, 4],
+    'SharedStashSoftCoreV2.d2i': [9, 9, 9],
+    'Settings.json': [123, 125],
+    'Yisan.key': [7],
+    'mods/deep.txt': [42, 42],
+  };
+  for (const [name, bytes] of Object.entries(want)) {
+    const got = bk[name];
+    if (!got || got.join(',') !== bytes.join(',')) {
+      console.error(`✗ 备份漏了或写错了：${name}`); ok = false;
+    }
+  }
+  if (Object.keys(bk).length !== Object.keys(want).length + 1) {
+    console.error('✗ 备份的文件数量不对'); ok = false;
+  }
+  if (!/^d2r-存档备份-\d{8}-\d{6}$/.test(bk.__root || '')) {
+    console.error(`✗ 备份目录名不带时间戳：${bk.__root}`); ok = false;
+  }
+  console.log(`✓ 备份整个文件夹：${Object.keys(want).length} 个文件原样复制到 ${bk.__root}/`);
+  console.log(`  非存档文件（设置、key、子目录）也在内，目录结构保持不变`);
 }
 
 /* --- the backup zip must be a real, extractable archive -------------- */

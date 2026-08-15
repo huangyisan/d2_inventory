@@ -167,6 +167,10 @@ const loadHandle = () => idb('readonly', s => s.get('dir')).catch(() => null);
  * the bundle. Stored as data URLs so they survive a refresh without asking for
  * folder permission again.
  */
+/* Where backups go. Kept apart from the save folder handle on purpose: that
+ * one is opened read-only and must stay that way. */
+const saveBackupDir = h => idb('readwrite', s => s.put(h, 'backupdir')).catch(() => {});
+const loadBackupDir = () => idb('readonly', s => s.get('backupdir')).catch(() => null);
 const saveMF = n => idb('readwrite', s => s.put(n, 'mf')).catch(() => {});
 const loadMF = () => idb('readonly', s => s.get('mf')).catch(() => null);
 const saveGlv = n => idb('readwrite', s => s.put(n, 'glv')).catch(() => {});
@@ -394,8 +398,34 @@ function setStatus(msg, busy) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Backup: repackage the files just read into a zip and download it     */
+/* Backup: copy the whole folder somewhere safe, byte for byte          */
 /* ------------------------------------------------------------------ */
+/*
+ * What gets backed up is the folder, not the parse. The page only reads .d2s
+ * and .d2i, but the folder also holds the shared stash, the settings, and the
+ * per-character control files — losing those is still losing something, and
+ * deciding for you which ones matter is exactly the judgement call you should
+ * not have to make. So: everything under the folder, subfolders included, at
+ * the bytes it has on disk right now.
+ *
+ * Preferred output is plain files in a folder you pick, because restoring is
+ * then a drag back rather than an unzip. The zip writer below stays as the
+ * fallback for browsers with no write access (Safari, Firefox).
+ */
+async function walkFolder(handle, prefix = '') {
+  const out = [];
+  for await (const entry of handle.values()) {
+    const name = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.kind === 'file') {
+      out.push({ name, entry });
+    } else if (entry.kind === 'directory') {
+      out.push(...await walkFolder(entry, name));
+    }
+  }
+  return out;
+}
+
+
 const CRC_TABLE = (() => {
   const t = new Uint32Array(256);
   for (let i = 0; i < 256; i++) {
@@ -463,11 +493,8 @@ function stamp(d) {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function backupNow() {
-  if (!backupSet.length) return;
-  const when = new Date();
-  const folder = `d2r-存档备份-${stamp(when)}`;
-  const blob = makeZip(backupSet.map(f => ({ name: `${folder}/${f.name}`, data: f.data })), when);
+function downloadZip(files, when, folder) {
+  const blob = makeZip(files.map(f => ({ name: `${folder}/${f.name}`, data: f.data })), when);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -476,8 +503,97 @@ function backupNow() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10000);
-  const kb = Math.round(blob.size / 1024);
-  setStatus(`已导出备份：${esc(folder)}.zip（${backupSet.length} 个文件，约 ${kb} KB）。`);
+  return blob.size;
+}
+
+/* Where backups go, remembered so the second one is a single click. */
+async function backupDestination() {
+  let dest = await loadBackupDir();
+  if (dest && dest.queryPermission) {
+    let perm = await dest.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted' && dest.requestPermission) {
+      perm = await dest.requestPermission({ mode: 'readwrite' });
+    }
+    if (perm !== 'granted') dest = null;
+  }
+  if (dest) return dest;
+  dest = await window.showDirectoryPicker({ mode: 'readwrite', id: 'd2backupdest' });
+  // Writing the backup inside the save folder would grow it every time and put
+  // stray files where the game looks for saves.
+  if (dirHandle && dest.isSameEntry && await dest.isSameEntry(dirHandle)) {
+    throw new Error('备份不能放在存档文件夹本身，换一个位置');
+  }
+  await saveBackupDir(dest);
+  return dest;
+}
+
+async function backupNow() {
+  const when = new Date();
+  const folder = `d2r-存档备份-${stamp(when)}`;
+
+  // No folder handle means the file-input fallback was used: all that exists
+  // is the saves already in memory, and there is nothing to write with.
+  if (!dirHandle) {
+    if (!backupSet.length) return;
+    const size = downloadZip(backupSet, when, folder);
+    setStatus(`已导出 ${esc(folder)}.zip（${backupSet.length} 个存档，约 ${Math.round(size / 1024)} KB）。` +
+      `这个浏览器只能读取，备份里仅有存档本身。`);
+    return;
+  }
+
+  setStatus('正在备份…', true);
+  let files;
+  try {
+    files = await walkFolder(dirHandle);
+  } catch (err) {
+    setStatus(`备份失败，读不了文件夹：${esc(err.message)}`);
+    return;
+  }
+  if (!files.length) { setStatus('文件夹是空的，没有可备份的内容。'); return; }
+
+  const blobs = [];
+  for (const f of files) {
+    const file = await f.entry.getFile();
+    blobs.push({ name: f.name, data: new Uint8Array(await file.arrayBuffer()) });
+  }
+  const bytes = blobs.reduce((n, f) => n + f.data.length, 0);
+
+  if (!window.showDirectoryPicker) {
+    const size = downloadZip(blobs, when, folder);
+    setStatus(`已导出 ${esc(folder)}.zip（${blobs.length} 个文件，约 ${Math.round(size / 1024)} KB）。`);
+    return;
+  }
+
+  let dest;
+  try {
+    dest = await backupDestination();
+  } catch (err) {
+    if (err.name === 'AbortError') { setStatus('已取消备份。'); return; }
+    setStatus(`选备份位置失败：${esc(err.message)}`);
+    return;
+  }
+
+  try {
+    const root = await dest.getDirectoryHandle(folder, { create: true });
+    for (const f of blobs) {
+      // Recreate subfolders; the last segment is the file itself.
+      const parts = f.name.split('/');
+      let dir = root;
+      for (const seg of parts.slice(0, -1)) {
+        dir = await dir.getDirectoryHandle(seg, { create: true });
+      }
+      const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+      const w = await fh.createWritable();
+      await w.write(f.data);
+      await w.close();
+    }
+  } catch (err) {
+    setStatus(`写入备份失败：${esc(err.message)}`);
+    return;
+  }
+
+  setStatus(`已备份 ${blobs.length} 个文件（约 ${Math.round(bytes / 1024)} KB）到 ` +
+    `<b>${esc(dest.name)}/${esc(folder)}</b>，原样复制，存档没有改动。`);
 }
 
 async function loadFromHandle(handle, { prompt = false } = {}) {

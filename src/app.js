@@ -1282,27 +1282,21 @@ function viewTz() {
       拉取新排期后重新打包即可。</div>`;
   }
 
-  const z = tzZone(cur);
+  // No banner: the highlighted strip in the calendar is the current zone, and
+  // the countdown lives on it. What the banner used to spell out — immunities,
+  // boss packs, super uniques — moves into each strip's hover text.
+  function tip(zz) {
+    const bits = [zz.en];
+    const imm = (zz.imm || []).map(k => IMMUNE[k] || k).join('、');
+    if (imm) bits.push(`免疫：${imm}`);
+    if ((zz.packs || []).length === 2) bits.push(`首领组：${zz.packs[0]}~${zz.packs[1]} 组`);
+    if ((zz.su || []).length) bits.push(`超级唯一怪：${zz.su.join('、')}`);
+    return bits.join('\n');
+  }
   const ends = TZ_START + (cur + 1) * TZ_STEP;
-  const nxt = cur + 1 < TZ_COUNT ? tzZone(cur + 1) : null;
+  const countdown = `<b class="tzleft" id="tzleft" data-ends="${ends}">${mmss(ends - now)}</b>`;
 
-  const imm = (z.imm || []).map(k => IMMUNE[k] || k).join('、');
-  const packs = (z.packs || []).length === 2 ? `${z.packs[0]}~${z.packs[1]} 组` : '';
-
-  let html = `
-    <div class="tznow">
-      <div class="lbl">当前恐怖地带 · 到 ${hhmm(new Date(ends))} 结束，还剩
-        <b class="left" id="tzleft" data-ends="${ends}">${mmss(ends - now)}</b></div>
-      <div class="z"><span class="act">${actZh(z.act)}</span>${esc(z.zh)}</div>
-      <div class="en">${esc(z.en)}</div>
-      <div class="meta">
-        ${imm ? `<span>免疫：${esc(imm)}</span>` : ''}
-        ${packs ? `<span>首领组：${packs}</span>` : ''}
-        ${(z.su || []).length ? `<span>超级唯一怪：${esc(z.su.join('、'))}</span>` : ''}
-      </div>
-    </div>
-    ${nxt ? `<p class="tznext">${hhmm(new Date(ends))} 起换成 ${actZh(nxt.act)}
-      <b>${esc(nxt.zh)}</b></p>` : ''}`;
+  let html = '';
 
   // Zone picker. Sorted by act then name, so it reads like the waypoint list.
   const order = TZ.zones.map((z, i) => [z, i])
@@ -1351,7 +1345,8 @@ function viewTz() {
           <span class="dl">${esc(dayLabel(d.t))}</span>
           <span class="dt">${d.slots.map(i => {
             const on = i === cur;
-            return `<span class="tzhit${on ? ' now' : ''}">${hhmm(tzTime(i))}</span>`;
+            return `<span class="tzhit${on ? ' now' : ''}">${hhmm(tzTime(i))}${
+              on ? ` ${countdown}` : ''}</span>`;
           }).join('')}</span>
         </div>`;
       }
@@ -1373,7 +1368,7 @@ function viewTz() {
 
     html += `
       <div class="tzday">
-        <h3>${label} <span class="thin">${esc(date)} · 每 30 分钟换一次</span></h3>
+        <h3>${label} <span class="thin">${esc(date)}</span></h3>
         <span class="sp"></span>
         <button class="btn small" data-day="-1"${from <= 0 ? ' disabled' : ''}>← 前一天</button>
         <button class="btn small" data-day="0"${state.day === 0 ? ' disabled' : ''}>今天</button>
@@ -1385,10 +1380,11 @@ function viewTz() {
       const zz = tzZone(i);
       const t = tzTime(i);
       const cls = i === cur ? 'now' : (TZ_START + (i + 1) * TZ_STEP <= now ? 'past' : '');
-      html += `<div class="tzrow ${cls} a${zz.act}">
+      html += `<div class="tzrow ${cls} a${zz.act}" title="${esc(tip(zz))}">
         <span class="t">${hhmm(t)}</span>
         <span class="act">${actZh(zz.act)}</span>
-        <span class="z" title="${esc(zz.en)}">${esc(zz.zh)}</span>
+        <span class="z">${esc(zz.zh)}</span>
+        ${i === cur ? countdown : ''}
       </div>`;
     }
     html += '</div>';

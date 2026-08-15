@@ -25,30 +25,56 @@ CACHE = os.path.join(HERE, "data", "tz_raw.json")
 # One printable character per zone index, so the slot list is a plain string.
 ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
 
-# Which zones are actually worth dropping what you are doing for. Same split the
-# community trackers use: all-round best, best experience, best loot.
-TAGS = {
-    "boss": [
-        "Tal Rasha's Tombs, Tal Rasha's Chamber, Canyon of the Magi",
-        "Chaos Sanctuary",
-        "Cathedral, Catacombs, Inner Cloister",
-        "Worldstone Keep, Throne of Destruction, Worldstone Chamber",
-    ],
-    "exp": [
-        "Flayer Jungle, Flayer Dungeon, Swampy Pit",
+# Which act each zone belongs to, so the list can say where to walk.
+ACTS = {
+    1: [
+        "Blood Moor, Den of Evil",
+        "Burial Grounds, Crypt, Mausoleum",
+        "Stony Field, Tristram",
+        "Cold Plains, Cave",
+        "Dark Wood, Underground Passage",
+        "Black Marsh, The Hole, Forgotten Tower",
         "Tamoe Highland, Outer Cloister, Pit, Monastery Gate",
-        "Rocky Waste, Stony Tomb",
-        "Lut Gholein Sewers",
-        "Dry Hills, Halls of the Dead",
-        "Bloody Foothills, Frigid Highlands, Abaddon",
-    ],
-    "loot": [
-        "Travincal",
-        "Durance of Hate",
+        "Barracks, Jail",
+        "Cathedral, Catacombs, Inner Cloister",
         "The Secret Cow Level",
     ],
+    2: [
+        "Lut Gholein Sewers",
+        "Rocky Waste, Stony Tomb",
+        "Dry Hills, Halls of the Dead",
+        "Far Oasis, Maggot Lair",
+        "Lost City, Valley of Snakes, Claw Viper Temple, Ancient Tunnels",
+        "Arcane Sanctuary, Harem, Palace Cellar",
+        "Tal Rasha's Tombs, Tal Rasha's Chamber, Canyon of the Magi",
+    ],
+    3: [
+        "Spider Forest, Arachnid Lair, Spider Cavern",
+        "Great Marsh",
+        "Flayer Jungle, Flayer Dungeon, Swampy Pit",
+        "Kurast Bazaar, Lower Kurast, Upper Kurast, Kurast Causeway, Kurast Sewers, "
+        "Ruined Temple, Disused Fane, Forgotten Reliquary, Forgotten Temple, "
+        "Ruined Fane, Disused Reliquary",
+        "Travincal",
+        "Durance of Hate",
+    ],
+    4: [
+        "Outer Steppes, Plains of Despair",
+        "City of the Damned, River of Flame",
+        "Chaos Sanctuary",
+    ],
+    5: [
+        "Bloody Foothills, Frigid Highlands, Abaddon",
+        "Frozen Tundra, Infernal Pit",
+        "Arreat Plateau, Pit of Acheron",
+        "Crystalline Passage, Frozen River",
+        "Nihlathak's Temple, Temple Halls",
+        "Glacial Trail, Drifter Cavern",
+        "Ancient's Way, Icy Cellar",
+        "Worldstone Keep, Throne of Destruction, Worldstone Chamber",
+    ],
 }
-TAG_OF = {name: tag for tag, names in TAGS.items() for name in names}
+ACT_OF = {name: act for act, names in ACTS.items() for name in names}
 
 
 def load_raw():
@@ -85,13 +111,16 @@ def main():
                 "imm": e.get("immunities", []),
                 "packs": e.get("numBossPacks") or [],
                 "su": e.get("superuniques", []),
-                "tag": TAG_OF.get(key, ""),
+                "act": ACT_OF.get(key, 0),
             })
     if len(zones) > len(ALPHABET):
         raise SystemExit(f"地区数 {len(zones)} 超出字母表")
-    unknown = set(TAG_OF) - set(order)
+    unknown = set(ACT_OF) - set(order)
     if unknown:
-        raise SystemExit(f"标记了不存在的地区: {sorted(unknown)}")
+        raise SystemExit(f"标了幕但排期里没有的地区: {sorted(unknown)}")
+    unplaced = [z["en"] for z in zones if not z["act"]]
+    if unplaced:
+        raise SystemExit(f"这些地区不知道属于第几幕: {unplaced}")
 
     slots = "".join(ALPHABET[order[e["zone"]["enUS"]]] for e in raw)
     data = {

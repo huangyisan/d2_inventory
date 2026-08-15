@@ -1231,8 +1231,9 @@ const TZ_STEP = TZ.step * 1000;
 const TZ_COUNT = TZ.slots.length;
 const TZ_END = TZ_START + TZ_STEP * TZ_COUNT;
 
-const TZ_TAGS = { boss: '综合最好', exp: '刷经验', loot: '刷装备' };
 const IMMUNE = { c: '冰', f: '火', l: '电', p: '毒', ph: '物理' };
+const ACT_ZH = ['', '一', '二', '三', '四', '五'];
+const actZh = n => `第${ACT_ZH[n] || n}幕`;
 
 // Which slot covers an instant, or -1 when the baked-in calendar doesn't reach.
 function tzSlot(ms) {
@@ -1252,8 +1253,6 @@ function tzMidnight(off) {
   d.setDate(d.getDate() + off);
   return d;
 }
-
-const tagHtml = z => z.tag ? ` <span class="tzt ${z.tag}">${TZ_TAGS[z.tag]}</span>` : '';
 
 function viewTz() {
   const now = Date.now();
@@ -1275,7 +1274,7 @@ function viewTz() {
   let html = `
     <div class="tznow">
       <div class="lbl">当前恐怖地带 · 到 ${hhmm(new Date(ends))} 结束（还有 <b class="left">${mins}</b> 分钟）</div>
-      <div class="z">${esc(z.zh)}${tagHtml(z)}</div>
+      <div class="z"><span class="act">${actZh(z.act)}</span>${esc(z.zh)}</div>
       <div class="en">${esc(z.en)}</div>
       <div class="meta">
         ${imm ? `<span>免疫：${esc(imm)}</span>` : ''}
@@ -1283,7 +1282,8 @@ function viewTz() {
         ${(z.su || []).length ? `<span>超级唯一怪：${esc(z.su.join('、'))}</span>` : ''}
       </div>
     </div>
-    ${nxt ? `<p class="tznext">${hhmm(new Date(ends))} 起换成 <b>${esc(nxt.zh)}</b>${tagHtml(nxt)}</p>` : ''}`;
+    ${nxt ? `<p class="tznext">${hhmm(new Date(ends))} 起换成 ${actZh(nxt.act)}
+      <b>${esc(nxt.zh)}</b></p>` : ''}`;
 
   // One local day at a time. The slots are evenly spaced, so the day's first
   // slot is found by clock arithmetic rather than by scanning.
@@ -1312,9 +1312,10 @@ function viewTz() {
     const zz = tzZone(i);
     const t = tzTime(i);
     const cls = i === cur ? 'now' : (TZ_START + (i + 1) * TZ_STEP <= now ? 'past' : '');
-    html += `<div class="tzrow ${cls}">
+    html += `<div class="tzrow ${cls} a${zz.act}">
       <span class="t">${hhmm(t)}</span>
-      <span class="z" title="${esc(zz.en)}">${esc(zz.zh)}</span>${tagHtml(zz)}
+      <span class="act">${actZh(zz.act)}</span>
+      <span class="z" title="${esc(zz.en)}">${esc(zz.zh)}</span>
     </div>`;
   }
   html += '</div>';

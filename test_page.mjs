@@ -356,7 +356,7 @@ print(json.dumps({"bad": bad,
     out.step = TZ.step;
     out.count = TZ.slots.length;
     out.kinds = TZ.zones.length;
-    out.tagged = TZ.zones.filter(z => z.tag).length;
+    out.acts = TZ.zones.filter(z => z.act >= 1 && z.act <= 5).length;
     // Every day must list a full 24 hours' worth of slots.
     for (const d of [-1, 0, 1]) {
       state.day = d;
@@ -364,7 +364,7 @@ print(json.dumps({"bad": bad,
       out.days[d] = (html.match(/class="tzrow/g) || []).length;
     }
     state.day = 0;
-    out.now = (viewTz().match(/class="tzrow now"/g) || []).length;
+    out.now = (viewTz().match(/class="tzrow now [^"]*"/g) || []).length;
     return out;
   })()`, ctx);
 
@@ -376,7 +376,8 @@ print(json.dumps({"bad": bad,
     if (n !== perDay) { console.error(`✗ 第 ${d} 天只有 ${n} 个时段，应为 ${perDay}`); ok = false; }
   }
   if (tz.now !== 1) { console.error(`✗ 今天高亮了 ${tz.now} 个时段，应为 1 个`); ok = false; }
-  console.log(`✓ 恐怖地带：${tz.kinds} 种地区（${tz.tagged} 种标了推荐）· ${tz.count} 个时段 · ` +
+  if (tz.acts !== tz.kinds) { console.error('✗ 有地区没有归到第几幕'); ok = false; }
+  console.log(`✓ 恐怖地带：${tz.kinds} 种地区（全部标了幕）· ${tz.count} 个时段 · ` +
     `每天 ${perDay} 格 · 无存档也能看`);
   console.log(`  当前：${tz.zone}`);
 }

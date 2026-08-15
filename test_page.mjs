@@ -365,6 +365,19 @@ print(json.dumps({"bad": bad,
     }
     state.day = 0;
     out.now = (viewTz().match(/class="tzrow now [^"]*"/g) || []).length;
+    // Following one zone: every listed time must really be that zone, and the
+    // count must match a straight scan of the schedule.
+    const tv = TZ.zones.findIndex(z => z.en === 'Travincal');
+    out.tvIndex = tv;
+    state.zone = tv;
+    const html = viewTz();
+    out.tvShown = (html.match(/class="tzhit/g) || []).length;
+    out.tvSaid = Number((html.match(/接下来还会出现 (\\d+) 次/) || [])[1]);
+    let scan = 0;
+    for (let k = i; k < TZ.slots.length; k++) if (TZ.alphabet.indexOf(TZ.slots[k]) === tv) scan++;
+    out.tvScan = scan;
+    out.tvOnlyThatZone = !/tzrow/.test(html);
+    state.zone = null;
     return out;
   })()`, ctx);
 
@@ -376,9 +389,15 @@ print(json.dumps({"bad": bad,
     if (n !== perDay) { console.error(`✗ 第 ${d} 天只有 ${n} 个时段，应为 ${perDay}`); ok = false; }
   }
   if (tz.now !== 1) { console.error(`✗ 今天高亮了 ${tz.now} 个时段，应为 1 个`); ok = false; }
+  if (tz.tvIndex < 0) { console.error('✗ 排期里找不到崔凡克'); ok = false; }
+  if (tz.tvSaid !== tz.tvScan) {
+    console.error(`✗ 地区筛选场次不符：界面 ${tz.tvSaid} 次，直接扫 ${tz.tvScan} 次`); ok = false;
+  }
+  if (!tz.tvOnlyThatZone) { console.error('✗ 选了单个地区还在渲染整天的排期'); ok = false; }
   if (tz.acts !== tz.kinds) { console.error('✗ 有地区没有归到第几幕'); ok = false; }
   console.log(`✓ 恐怖地带：${tz.kinds} 种地区（全部标了幕）· ${tz.count} 个时段 · ` +
     `每天 ${perDay} 格 · 无存档也能看`);
+  console.log(`  只看崔凡克：剩余排期里还有 ${tz.tvSaid} 次，列出最近 ${tz.tvShown} 次`);
   console.log(`  当前：${tz.zone}`);
 }
 

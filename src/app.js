@@ -1916,27 +1916,47 @@ $('#view').addEventListener('contextmenu', e => {
   renderView();
 });
 
-$('#view').addEventListener('input', e => {
-  const t = e.target;
-  if (!t || !t.dataset) return;
+/*
+ * Number boxes settle on `change`, never on `input`.
+ *
+ * Re-rendering per keystroke rebuilds the box you are typing into: type "8"
+ * towards 80, the view redraws, and the "0" lands nowhere. So the value is
+ * only stored while typing, and the page redraws once you leave the field or
+ * press Enter.
+ */
+function numberInput(t, commit) {
+  if (!t || !t.dataset) return false;
   if (t.dataset.pace !== undefined) {
     const n = Math.max(1, Number(t.value) || 1);
     state.pace[t.dataset.pace] = { ...(state.pace[t.dataset.pace] || {}), [t.dataset.field]: n };
-    savePace(state.pace);
-    renderView();
-    return;
+    // Half-typed numbers are not worth remembering: "80" passes through "8".
+    if (commit) savePace(state.pace);
+    return true;
   }
   if (t.dataset.sklevel !== undefined) {
     state.skLevel = Math.min(99, Math.max(1, Number(t.value) || 1));
+    return true;
+  }
+  return false;
+}
+
+$('#view').addEventListener('input', e => { numberInput(e.target, false); });
+
+$('#view').addEventListener('change', e => {
+  const t = e.target;
+  if (numberInput(t, true)) { renderView(); return; }
+  if (t && t.dataset && t.dataset.skquest !== undefined) {
+    state.skQuests = !!t.checked;
     renderView();
   }
 });
 
-$('#view').addEventListener('change', e => {
-  const t = e.target;
-  if (t && t.dataset && t.dataset.skquest !== undefined) {
-    state.skQuests = !!t.checked;
-    renderView();
+// Enter should commit without having to click away first.
+$('#view').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target && e.target.dataset &&
+      (e.target.dataset.pace !== undefined || e.target.dataset.sklevel !== undefined)) {
+    e.preventDefault();
+    if (e.target.blur) e.target.blur();
   }
 });
 

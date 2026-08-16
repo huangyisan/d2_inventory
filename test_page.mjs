@@ -357,6 +357,41 @@ console.log(`✓ ${Object.keys(tabSizes).length} 个视图 (${Object.keys(tabSiz
   console.log('  「更改备份位置」只改位置，没有顺手写文件');
 }
 
+/* --- charms: item level is in the save even though the game hides it ---- */
+{
+  vm.runInContext(`
+    globalThis.__charms = function (rep) {
+      report = rep;
+      state.mode = 'gear'; state.tab = 'charms'; state.q = ''; state.slot = null;
+      const out = {};
+      state.ilvlMin = 0; state.charmSize = null; renderView();
+      const all = $('#view').innerHTML || '';
+      out.total = (all.match(/class="afitem"/g) || []).length;
+      out.ilvls = [...all.matchAll(/class="ilvl[^"]*">ilvl (\\d+)</g)].map(m => +m[1]);
+      state.ilvlMin = 90; renderView();
+      out.hi = (($('#view').innerHTML || '').match(/class="afitem"/g) || []).length;
+      state.charmSize = 'cm3'; renderView();
+      out.hiGrand = (($('#view').innerHTML || '').match(/class="afitem"/g) || []).length;
+      out.text = $('#view').innerHTML || '';
+      state.ilvlMin = 0; state.charmSize = null; state.tab = 'sets';
+      return out;
+    };
+  `, ctx);
+  const c = ctx.__charms(report);
+  if (c.total !== 103) { console.error(`✗ 咒符数应为 103，实际 ${c.total}`); ok = false; }
+  // Sorted by item level, highest first.
+  const sorted = c.ilvls.every((v, i) => i === 0 || c.ilvls[i - 1] >= v);
+  if (!sorted) { console.error('✗ 咒符没有按物品等级从高到低排'); ok = false; }
+  if (c.ilvls[0] !== 99) { console.error(`✗ 最高等级应为 99，实际 ${c.ilvls[0]}`); ok = false; }
+  const expectHi = c.ilvls.filter(v => v >= 90).length;
+  if (c.hi !== expectHi) { console.error(`✗ ilvl≥90 筛选应为 ${expectHi} 个，实际 ${c.hi}`); ok = false; }
+  if (c.hi <= c.hiGrand) { console.error('✗ 叠加尺寸筛选后数量没有减少'); ok = false; }
+  // Formatting traps found on real charms.
+  if (/\+-/.test(c.text)) { console.error('✗ 负数词缀渲染成了 "+-"'); ok = false; }
+  if (/技能技能/.test(c.text)) { console.error('✗ 技能树名字后面多了一个「技能」'); ok = false; }
+  console.log(`✓ 咒符：${c.total} 个，按 ilvl 排序（最高 ${c.ilvls[0]}），≥90 有 ${c.hi} 个、其中特大 ${c.hiGrand} 个`);
+}
+
 /* --- the backup zip must be a real, extractable archive -------------- */
 {
   const entries = [];

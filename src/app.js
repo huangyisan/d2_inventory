@@ -15,6 +15,7 @@ let report = null;
 let dirHandle = null;
 let backupSet = [];   // raw bytes of the files last read, for the backup zip
 let state = { mode: 'gear', tab: 'sets', q: '', slot: null, only: 'all', sort: 'progress',
+  ilvlMin: 0, charmSize: null,
   target: null, qty: 1, day: 0, affixes: [], bases: [], zone: null,
   skClass: 'sor', skLevel: 99, skQuests: true, skPts: {},
   dropBy: 'kill', pace: {}, mf: 0, glv: 99 };
@@ -753,6 +754,7 @@ document.addEventListener('drop', async e => {
 // telling you where the terror zone is. Only the first two need a save file.
 const MODES = [['gear', '装备收藏'], ['runes', '符文合成'], ['tz', '恐怖地带'], ['skills', '天赋模拟']];
 const GEAR_TABS = [['sets', '套装收集'], ['uniques', '暗金收集'], ['affix', '词条筛选'],
+  ['charms', '咒符板子'],
   ['base', '底材筛选'], ['lost', '找回清单'], ['dupes', '重复清理']];
 // The chronicle tab only exists in D2R saves that have one.
 const TABS = () => (state.mode !== 'gear' || !report ? []
@@ -1104,6 +1106,14 @@ function renderFilters() {
     html += '<span class="sep"></span>';
     html += [['progress', '按进度排'], ['name', '按名称排'], ['missing', '按缺得最多排']]
       .map(([k, l]) => `<button class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
+  }
+  if (state.tab === 'charms') {
+    html += [[0, '全部等级'], [85, 'ilvl ≥ 85'], [90, '≥ 90'], [93, '≥ 93'], [95, '≥ 95']]
+      .map(([v, l]) => `<button class="chip" data-ilvl="${v}" aria-pressed="${state.ilvlMin === v}">${l}</button>`).join('');
+    html += '<span class="sep"></span>';
+    html += `<button class="chip" data-size="" aria-pressed="${!state.charmSize}">全部尺寸</button>` +
+      Object.entries(CHARM_SIZE).map(([c, l]) =>
+        `<button class="chip" data-size="${c}" aria-pressed="${state.charmSize === c}">${l}</button>`).join('');
   }
   if (showSlot) {
     if (html) html += '<span class="sep"></span>';
@@ -1567,6 +1577,140 @@ function affixValue(item, a) {
   return best;
 }
 
+/*
+ * Charms carry their affixes as a plain stat list. Every id below was taken
+ * from the stats actually present on charms in a real save and checked against
+ * itemstatcost's own名字, so nothing here is guessed.
+ *
+ * fmt: how to print it. Values that the game stores as fixed point are scaled
+ * by the stat table's own shift before they get here.
+ */
+const CHARM_STATS = {
+  0: '力量 +%v', 1: '精力 +%v', 2: '敏捷 +%v', 3: '体力 +%v',
+  7: '生命 +%v', 9: '法力 +%v', 11: '耐力 +%v',
+  19: '攻击准确率 +%v', 22: '最大伤害 +%v', 24: '最大伤害 +%v', 160: '投掷最大伤害 +%v',
+  31: '防御 +%v',
+  39: '火焰抗性 +%v%', 41: '闪电抗性 +%v%', 43: '冰冷抗性 +%v%', 45: '毒素抗性 +%v%',
+  60: '偷取生命 %v%', 62: '偷取法力 %v%',
+  79: '金币掉落 +%v%', 80: '魔法寻找 +%v%', 87: '商店价格 -%v%', 89: '光照范围 +%v',
+  91: '需求 -%v%', 93: '攻击速度 +%v%', 96: '跑步速度 +%v%', 99: '受击回复 +%v%',
+  105: '施法速度 +%v%', 102: '格挡率 +%v%',
+  135: '撕裂伤口 +%v%', 136: '压碎打击 +%v%', 141: '致命一击 +%v%',
+  36: '物理伤害减免 %v', 37: '魔法伤害减免 %v', 153: '不会被冰冻',
+  // Sunder charms. The ids follow itemstatcost's own order, which is not the
+  // element order you would expect — 190 is lightning, 192 is physical.
+  187: '打破怪物冰冷免疫', 189: '打破怪物火焰免疫', 190: '打破怪物闪电免疫',
+  191: '打破怪物毒素免疫', 192: '打破怪物物理免疫', 193: '打破怪物魔法免疫',
+  194: '内嵌 %v 个孔',
+};
+
+// Class order as the save stores it (item_addclassskills' param), with the
+// names taken from the game's own class table.
+const GAME_CLASSES = ['ama', 'sor', 'nec', 'pal', 'bar', 'dru', 'ass', 'war'];
+const CLASS_ZH = GAME_CLASSES.map(code =>
+  (CATALOG.classes.find(c => c.code === code) || {}).zh || code);
+// Skill tabs are numbered class*3 + (page-1) over the seven original classes;
+// the expansion class's tabs use ids this table does not cover, and a wrong
+// name is worse than none, so anything unknown stays generic.
+const SKILL_TAB_ZH = {};
+GAME_CLASSES.slice(0, 7).forEach((code, ci) => {
+  const cls = CATALOG.classes.find(c => c.code === code);
+  if (cls) cls.tabs.forEach((t, ti) => { SKILL_TAB_ZH[ci * 3 + ti] = `${cls.zh} · ${t}`; });
+});
+// Damage-over-time pairs: the game shows one line built from several stats.
+const FRAMES_PER_SEC = 25;
+
+function charmLines(stats) {
+  const by = {};
+  for (const s of stats) by[s.id] = s;
+  const val = id => {
+    const s = by[id];
+    if (!s) return null;
+    const shift = CAT.stat(id).shift || 0;
+    return shift ? Math.round(s.value / (1 << shift)) : s.value;
+  };
+  const out = [];
+  const done = new Set();
+
+  // Poison and cold damage are stored as min/max plus a duration in frames.
+  if (by[57] || by[58]) {
+    const len = by[59] ? by[59].value : 0;
+    const dmg = Math.round((by[57] ? by[57].value : 0) * len / 256);
+    out.push(`毒性伤害 ${dmg} 点，持续 ${Math.round(len / FRAMES_PER_SEC)} 秒`);
+    [57, 58, 59].forEach(i => done.add(i));
+  }
+  if (by[54] || by[55]) {
+    const len = by[56] ? by[56].value : 0;
+    out.push(`冰冷伤害 ${val(54) || 0}-${val(55) || 0}${
+      len ? `，持续 ${Math.round(len / FRAMES_PER_SEC)} 秒` : ''}`);
+    [54, 55, 56].forEach(i => done.add(i));
+  }
+  if (by[50] || by[51]) { out.push(`闪电伤害 ${val(50) || 0}-${val(51) || 0}`); [50, 51].forEach(i => done.add(i)); }
+  if (by[48] || by[49]) { out.push(`火焰伤害 ${val(48) || 0}-${val(49) || 0}`); [48, 49].forEach(i => done.add(i)); }
+
+  // Skill bonuses name the class or the skill tree they apply to.
+  if (by[127]) { out.push(`全部技能 +${val(127)}`); done.add(127); }
+  if (by[83]) { out.push(`${CLASS_ZH[by[83].param] || '职业'}技能 +${val(83)}`); done.add(83); }
+  if (by[188]) {
+    const tab = SKILL_TAB_ZH[by[188].param];
+    // Some tab names already end in 技能 ("圣骑士 · 战斗技能"); don't say it twice.
+    out.push(tab ? `${tab}${tab.endsWith('技能') ? '' : '技能'} +${val(188)}`
+                 : `某系技能 +${val(188)}`);
+    done.add(188);
+  }
+  // Encoded skill/level/chance blobs; the numbers are not worth guessing at.
+  if (by[198]) { out.push('击中时有几率施放技能'); done.add(198); }
+  if (by[204]) { out.push('可施放技能（充能）'); done.add(204); }
+
+  for (const s of stats) {
+    if (done.has(s.id)) continue;
+    const tpl = CHARM_STATS[s.id];
+    if (!tpl) continue;
+    const v = val(s.id);
+    if (!v && tpl.includes('%v')) continue;
+    // "+%v" with a negative value would read "+-83%"; sunder charms do that.
+    out.push(tpl.replace('%v', v).replace('+-', '-'));
+  }
+  return out;
+}
+
+const CHARM_SIZE = { cm1: '小型', cm2: '大型', cm3: '特大' };
+
+function viewCharms() {
+  const charms = report.gear
+    .filter(g => CHARM_SIZE[g.code])
+    .filter(g => (g.ilvl || 0) >= state.ilvlMin)
+    .filter(g => !state.charmSize || g.code === state.charmSize)
+    .filter(g => hit(g, state.q));
+  charms.sort((a, b) => (b.ilvl || 0) - (a.ilvl || 0) || a.code.localeCompare(b.code));
+
+  const all = report.gear.filter(g => CHARM_SIZE[g.code]);
+  const head = `<h2 class="section">${charms.length} 个咒符
+    <span class="thin">— 共 ${all.length} 个 · 等级 90 以上 ${all.filter(g => (g.ilvl || 0) >= 90).length} 个
+    · 85 以上 ${all.filter(g => (g.ilvl || 0) >= 85).length} 个</span></h2>
+    <div class="hintbox">咒符的物品等级（ilvl）游戏里不显示，但存档里存着。重洗（3 颗完美宝石 + 魔法咒符）
+      能出到什么词缀由它决定，等级越高可洗的池子越大。</div>`;
+
+  if (!charms.length) return head + '<div class="empty">没有符合条件的咒符</div>';
+
+  return head + '<div class="aflist">' + charms.map(g => {
+    const kind = g.kind === 'unique' ? 'u' : g.kind === 'set' ? 's' : g.kind === 'rare' ? 'r' : 'm';
+    const lines = charmLines(g.stats || []);
+    return `<div class="afitem">
+      <div class="afhead">
+        <span class="ilvl${(g.ilvl || 0) >= 90 ? ' hi' : ''}">ilvl ${g.ilvl || '?'}</span>
+        <span class="afname k${kind}">${esc(g.zh)}</span>
+        <span class="afslot">${CHARM_SIZE[g.code]}</span>
+        ${QUALITY_ZH[g.quality] && g.kind !== 'unique' ? `<span class="afslot">${QUALITY_ZH[g.quality]}</span>` : ''}
+      </div>
+      <div class="afwhere">${copiesHtml([g], { sockets: false })}</div>
+      <div class="afmods">${lines.length
+        ? lines.map(t => `<span class="afmod">${esc(t)}</span>`).join('')
+        : '<span class="afmod thin">没有词缀</span>'}</div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
 function viewAffix() {
   const picked = state.affixes.map(k => AFFIX_BY_KEY.get(k)).filter(Boolean);
 
@@ -1890,7 +2034,7 @@ function renderView() {
   if (state.mode === 'skills') { $('#view').innerHTML = viewSkills(); return; }
   if (state.mode === 'runes') { $('#view').innerHTML = viewCube(); return; }
   const fn = { sets: viewSets, uniques: viewUniques, affix: viewAffix, base: viewBases,
-    lost: viewLost, dupes: viewDupes };
+    charms: viewCharms, lost: viewLost, dupes: viewDupes };
   $('#view').innerHTML = fn[state.tab]();
 }
 
@@ -1929,6 +2073,8 @@ $('#filters').addEventListener('click', e => {
   if (b.dataset.only !== undefined) state.only = b.dataset.only;
   if (b.dataset.slot !== undefined) state.slot = b.dataset.slot || null;
   if (b.dataset.sort !== undefined) state.sort = b.dataset.sort;
+  if (b.dataset.ilvl !== undefined) state.ilvlMin = +b.dataset.ilvl;
+  if (b.dataset.size !== undefined) state.charmSize = b.dataset.size || null;
   renderFilters(); renderView();
 });
 

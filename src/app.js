@@ -1108,7 +1108,9 @@ function renderFilters() {
       .map(([k, l]) => `<button class="chip" data-sort="${k}" aria-pressed="${state.sort === k}">${l}</button>`).join('');
   }
   if (state.tab === 'charms') {
-    html += [[0, '全部等级'], [85, 'ilvl ≥ 85'], [90, '≥ 90'], [93, '≥ 93'], [95, '≥ 95']]
+    // 91 is the line that matters: below it a grand charm cannot roll the top
+    // affixes, so everything worth re-rolling sits at 91 and up.
+    html += [[0, '全部等级'], [91, 'ilvl ≥ 91'], [93, '≥ 93'], [95, '≥ 95']]
       .map(([v, l]) => `<button class="chip" data-ilvl="${v}" aria-pressed="${state.ilvlMin === v}">${l}</button>`).join('');
     html += '<span class="sep"></span>';
     html += `<button class="chip" data-size="" aria-pressed="${!state.charmSize}">全部尺寸</button>` +
@@ -1686,10 +1688,9 @@ function viewCharms() {
 
   const all = report.gear.filter(g => CHARM_SIZE[g.code]);
   const head = `<h2 class="section">${charms.length} 个咒符
-    <span class="thin">— 共 ${all.length} 个 · 等级 90 以上 ${all.filter(g => (g.ilvl || 0) >= 90).length} 个
-    · 85 以上 ${all.filter(g => (g.ilvl || 0) >= 85).length} 个</span></h2>
+    <span class="thin">— 共 ${all.length} 个 · 其中 ${all.filter(g => (g.ilvl || 0) >= 91).length} 个到了 91</span></h2>
     <div class="hintbox">咒符的物品等级（ilvl）游戏里不显示，但存档里存着。重洗（3 颗完美宝石 + 魔法咒符）
-      能出到什么词缀由它决定，等级越高可洗的池子越大。</div>`;
+      能出到什么词缀由它决定，等级越高可洗的池子越大。<b>ilvl 91 以上</b>才值得留着洗。</div>`;
 
   if (!charms.length) return head + '<div class="empty">没有符合条件的咒符</div>';
 
@@ -1698,7 +1699,7 @@ function viewCharms() {
     const lines = charmLines(g.stats || []);
     return `<div class="afitem">
       <div class="afhead">
-        <span class="ilvl${(g.ilvl || 0) >= 90 ? ' hi' : ''}">ilvl ${g.ilvl || '?'}</span>
+        <span class="ilvl${(g.ilvl || 0) >= 91 ? ' hi' : ''}">ilvl ${g.ilvl || '?'}</span>
         <span class="afname k${kind}">${esc(g.zh)}</span>
         <span class="afslot">${CHARM_SIZE[g.code]}</span>
         ${QUALITY_ZH[g.quality] && g.kind !== 'unique' ? `<span class="afslot">${QUALITY_ZH[g.quality]}</span>` : ''}
